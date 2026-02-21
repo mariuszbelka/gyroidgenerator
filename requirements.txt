@@ -1,0 +1,24 @@
+# Gyroid Generator v3.0 — Requirements
+# ======================================
+
+# Core numerical
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Mesh processing
+trimesh>=3.21.0
+scikit-image>=0.20.0
+
+# GUI
+PyQt6>=6.4.0
+PyQt6-Qt6>=6.4.0
+
+# Visualization
+matplotlib>=3.7.0
+pyqtgraph>=0.13.0
+
+# Optional (for vispy backend — not required for v3)
+# vispy>=0.12.0
+
+# Image export
+Pillow>=9.5.0
