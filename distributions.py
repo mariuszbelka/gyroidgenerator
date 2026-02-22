@@ -59,6 +59,7 @@ class VoxelAnalyzer:
             printer_pixel_um: Printer pixel size [µm] for printability checks
         """
         self.mesh = mesh
+        self._analysis_mesh = mesh # Used for ray-casting, can be simplified
         self.container_geometry = container_geometry
         self.container_params = container_params
         self.unit_cell_mm = unit_cell_mm
@@ -85,12 +86,26 @@ class VoxelAnalyzer:
                     f"resolution={voxels_per_unit_cell} vox/unit_cell")
 
         t0 = time.time()
-        voxel = self.mesh.voxelized(pitch=pitch)
+        voxel = self._analysis_mesh.voxelized(pitch=pitch)
         self._voxel_grid = voxel.matrix  # True = solid
         self._pitch = pitch
 
         logger.info(f"Voxel grid: {self._voxel_grid.shape}, "
                     f"time={time.time()-t0:.1f}s")
+
+    def simplify_analysis_mesh(self, target_faces: int):
+        """
+        Simplify the mesh used for ray-casting analysis.
+        This significantly improves performance and memory usage
+        while maintaining measurement accuracy.
+        """
+        if len(self.mesh.faces) <= target_faces:
+            self._analysis_mesh = self.mesh
+            return
+
+        logger.info(f"Simplifying mesh from {len(self.mesh.faces)} to {target_faces} faces...")
+        self._analysis_mesh = self.mesh.simplify_quadric_decimation(face_count=target_faces)
+        logger.info("Mesh simplification complete.")
 
     def _ensure_edt(self, voxels_per_unit_cell: int = 12):
         """Compute distance transforms if not cached."""
@@ -113,7 +128,7 @@ class VoxelAnalyzer:
     # ==================== WALL THICKNESS DISTRIBUTION ====================
 
     def calc_wall_thickness_distribution(self, n_samples: int = 10000,
-                                        batch_size: int = 2000,
+                                        batch_size: int = 100,
                                         callback=None) -> Dict:
         """
         Rozkład grubości ścian (Mesh-based Ray Casting).
@@ -130,11 +145,11 @@ class VoxelAnalyzer:
         t0 = time.time()
 
         # 1. Sample points on surface
-        points, face_indices = trimesh.sample.sample_surface(self.mesh, n_samples)
+        points, face_indices = trimesh.sample.sample_surface(self._analysis_mesh, n_samples)
 
         # 2. Get normals and flip them inwards (into the solid material)
         # Normal vectors point OUT of the solid towards the void.
-        normals = self.mesh.face_normals[face_indices]
+        normals = self._analysis_mesh.face_normals[face_indices]
         ray_directions = -normals
         ray_origins = points + (ray_directions * 1e-5)
 
@@ -149,7 +164,7 @@ class VoxelAnalyzer:
             b_origins = ray_origins[start:end]
             b_dirs = ray_directions[start:end]
 
-            locations, index_ray, _ = self.mesh.ray.intersects_location(
+            locations, index_ray, _ = self._analysis_mesh.ray.intersects_location(
                 ray_origins=b_origins,
                 ray_directions=b_dirs,
                 multiple_hits=False
@@ -205,7 +220,7 @@ class VoxelAnalyzer:
     # ==================== CHANNEL WIDTH DISTRIBUTION ====================
 
     def calc_channel_width_distribution(self, n_samples: int = 10000,
-                                         batch_size: int = 2000,
+                                         batch_size: int = 100,
                                          callback=None) -> Dict:
         """
         Rozkład szerokości kanałów (Mesh-based Ray Casting).
@@ -222,10 +237,10 @@ class VoxelAnalyzer:
         t0 = time.time()
 
         # 1. Sample points on surface
-        points, face_indices = trimesh.sample.sample_surface(self.mesh, n_samples)
+        points, face_indices = trimesh.sample.sample_surface(self._analysis_mesh, n_samples)
 
         # 2. Get normals pointing into the channels
-        ray_directions = self.mesh.face_normals[face_indices]
+        ray_directions = self._analysis_mesh.face_normals[face_indices]
         ray_origins = points + (ray_directions * 1e-5)
 
         # 3. Ray casting in batches
@@ -239,7 +254,7 @@ class VoxelAnalyzer:
             b_origins = ray_origins[start:end]
             b_dirs = ray_directions[start:end]
 
-            locations, index_ray, _ = self.mesh.ray.intersects_location(
+            locations, index_ray, _ = self._analysis_mesh.ray.intersects_location(
                 ray_origins=b_origins,
                 ray_directions=b_dirs,
                 multiple_hits=False

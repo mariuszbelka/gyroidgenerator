@@ -26,3 +26,4 @@ pyqtgraph>=0.13.0
 Pillow>=9.5.0
 PyOpenGL
 PyOpenGL_accelerate
+fast_simplification

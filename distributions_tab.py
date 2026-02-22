@@ -40,14 +40,24 @@ class AnalysisWorker(QThread):
     sub_progress = pyqtSignal(str, int)  # (analysis_name, percentage)
     error = pyqtSignal(str, str)  # (analysis_name, error_message)
 
-    def __init__(self, analyzer: VoxelAnalyzer, analyses: list, voxels_per_uc: int):
+    def __init__(self, analyzer: VoxelAnalyzer, analyses: list, voxels_per_uc: int,
+                 simplify: bool = False, target_faces: int = 200000):
         super().__init__()
         self.analyzer = analyzer
         self.analyses = analyses
         self.voxels_per_uc = voxels_per_uc
+        self.simplify = simplify
+        self.target_faces = target_faces
 
     def run(self):
         results_cache = {}
+
+        if self.simplify:
+            self.progress.emit("Simplifying mesh for analysis...")
+            try:
+                self.analyzer.simplify_analysis_mesh(self.target_faces)
+            except Exception as e:
+                logger.warning(f"Simplification failed, using original mesh: {e}")
 
         # Determine dynamic sample count based on mesh complexity
         # Target: ~10% of faces for sparse meshes, up to 50k for dense meshes
@@ -159,6 +169,29 @@ class DistributionsTab(QWidget):
         h.addWidget(self.pixel_spin)
         pg_layout.addLayout(h)
         controls_layout.addWidget(printer_group)
+
+        # Mesh Optimization (New in v3.2)
+        opt_group = QGroupBox("Mesh Optimization (Memory Safety)")
+        og_layout = QVBoxLayout(opt_group)
+
+        self.cb_simplify = QCheckBox("Simplify mesh for analysis")
+        self.cb_simplify.setChecked(True)
+        self.cb_simplify.setToolTip("Reduces triangle count before ray-casting. Recommended for meshes > 500k faces.")
+        og_layout.addWidget(self.cb_simplify)
+
+        h = QHBoxLayout()
+        h.addWidget(QLabel("Target faces:"))
+        self.target_faces_spin = QSpinBox()
+        self.target_faces_spin.setRange(50000, 1000000)
+        self.target_faces_spin.setSingleStep(50000)
+        self.target_faces_spin.setValue(200000)
+        h.addWidget(self.target_faces_spin)
+        og_layout.addLayout(h)
+
+        self.face_count_label = QLabel("Original: Unknown faces")
+        og_layout.addWidget(self.face_count_label)
+
+        controls_layout.addWidget(opt_group)
 
         # Analysis selection
         sel_group = QGroupBox("Select Analyses")
@@ -280,6 +313,16 @@ class DistributionsTab(QWidget):
                  unit_cell_mm, gyroid_params=None):
         """Set mesh data for analysis."""
         self._mesh = mesh
+        n_faces = len(mesh.faces)
+        self.face_count_label.setText(f"Original: {n_faces:,} faces")
+
+        # Auto-suggest target faces (e.g., cap at 300k if mesh is huge)
+        if n_faces > 500000:
+            self.target_faces_spin.setValue(300000)
+            self.cb_simplify.setChecked(True)
+        else:
+            self.cb_simplify.setChecked(False)
+
         self._analyzer = VoxelAnalyzer(
             mesh=mesh,
             container_geometry=container_geometry,
@@ -320,7 +363,9 @@ class DistributionsTab(QWidget):
         self.progress_label.setText("Running analysis...")
 
         self._worker = AnalysisWorker(
-            self._analyzer, analyses, self.resolution_spin.value()
+            self._analyzer, analyses, self.resolution_spin.value(),
+            simplify=self.cb_simplify.isChecked(),
+            target_faces=self.target_faces_spin.value()
         )
         self._worker.finished.connect(self._on_result)
         self._worker.progress.connect(self._on_progress)
