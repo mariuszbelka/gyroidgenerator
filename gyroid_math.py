@@ -365,6 +365,19 @@ def calculate_resolution(dimensions: Tuple[float, float, float],
     ny = int(np.ceil(depth / unit_cell * ppu))
     nz = int(np.ceil(height / unit_cell * ppu))
 
+    # Safety cap to prevent Out-of-Memory (OOM) errors
+    # Cap total points at ~125 million (approx 1GB as float64)
+    MAX_POINTS = 125_000_000
+    total_points = nx * ny * nz
+
+    if total_points > MAX_POINTS:
+        scale = (MAX_POINTS / total_points)**(1/3)
+        nx = int(nx * scale)
+        ny = int(ny * scale)
+        nz = int(nz * scale)
+        logger.warning(f"Resolution capped! Original would use {total_points:,} points. "
+                       f"New resolution: {nx}×{ny}×{nz}")
+
     # Ensure minimum resolution
     nx = max(nx, 50)
     ny = max(ny, 50)

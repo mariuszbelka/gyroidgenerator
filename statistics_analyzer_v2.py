@@ -61,18 +61,17 @@ class StatisticsCalculator:
             'surface_area': self.mesh.area,  # mm²
         }
 
+        # Calculate total container volume (always possible)
+        total_volume = self._calculate_container_volume()
+        results['total_volume'] = total_volume
+
         # Volume calculation (only if watertight)
         if self.mesh.is_watertight:
             results['gyroid_volume'] = self.mesh.volume  # mm³
-
-            # Calculate total container volume
-            total_volume = self._calculate_container_volume()
-            results['total_volume'] = total_volume
-            results['void_volume'] = total_volume - results['gyroid_volume']
-            results['porosity'] = (results['void_volume'] / total_volume) * 100  # %
+            results['void_volume'] = total_volume - results['gyroid_volume'] if total_volume else None
+            results['porosity'] = (results['void_volume'] / total_volume) * 100 if total_volume and results['void_volume'] is not None else None
         else:
             results['gyroid_volume'] = None
-            results['total_volume'] = None
             results['void_volume'] = None
             results['porosity'] = None
 

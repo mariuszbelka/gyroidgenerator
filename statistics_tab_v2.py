@@ -25,6 +25,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _f(val, fmt="{:.2f}", default="N/A"):
+    """Helper to format nullable values."""
+    if val is None:
+        return default
+    try:
+        return fmt.format(val)
+    except:
+        return str(val)
+
+
 class StatisticsCalculationThread(QThread):
     """Background thread for statistics calculations."""
 
@@ -288,16 +298,16 @@ class StatisticsTabV2(QWidget):
         text += f"Faces:       {basic['faces']:,}\n"
         text += f"Watertight:  {'Yes' if basic['watertight'] else 'No'}\n"
 
-        if basic['porosity'] is not None:
-            text += f"\nVolume:      {basic['total_volume']:.2f} mm³\n"
-            text += f"Gyroid:      {basic['gyroid_volume']:.2f} mm³\n"
-            text += f"Void:        {basic['void_volume']:.2f} mm³\n"
-            text += f"Porosity:    {basic['porosity']:.1f}%\n"
-        else:
-            text += f"\nVolume:      {basic['total_volume']:.2f} mm³\n"
-            text += "Porosity:    N/A (not watertight)\n"
+        text += f"\nVolume (Total): {_f(basic['total_volume'])} mm³\n"
 
-        text += f"\nSurface Area: {basic['surface_area']:.2f} mm²\n"
+        if basic['porosity'] is not None:
+            text += f"Gyroid Solid:  {_f(basic['gyroid_volume'])} mm³\n"
+            text += f"Void Space:    {_f(basic['void_volume'])} mm³\n"
+            text += f"Porosity:      {_f(basic['porosity'], '{:.1f}')}%\n"
+        else:
+            text += "Porosity:      N/A (not watertight)\n"
+
+        text += f"\nSurface Area: {_f(basic['surface_area'])} mm²\n"
 
         self.basic_stats_label.setText(text)
 
@@ -401,30 +411,30 @@ class StatisticsTabV2(QWidget):
 
             # Format result based on type
             if 'ssa_volumetric' in result:
-                text += f"  Volumetric:   {result['ssa_volumetric']:.2f} m²/mL\n"
+                text += f"  Volumetric:   {_f(result['ssa_volumetric'])} m²/mL\n"
                 if result['ssa_gravimetric']:
-                    text += f"  Gravimetric:  {result['ssa_gravimetric']:.2f} m²/g\n"
+                    text += f"  Gravimetric:  {_f(result['ssa_gravimetric'])} m²/g\n"
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
             elif 'mean_wall_thickness' in result:
-                text += f"  Mean: {result['mean_wall_thickness']:.1f} µm\n"
+                text += f"  Mean: {_f(result['mean_wall_thickness'], '{:.1f}')} µm\n"
                 text += f"  Method: {result['method']}\n"
                 if 'accuracy' in result:
                     text += f"  Accuracy: {result['accuracy']}\n"
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
             elif 'mean_channel_width' in result:
-                text += f"  Mean: {result['mean_channel_width']:.1f} µm\n"
+                text += f"  Mean: {_f(result['mean_channel_width'], '{:.1f}')} µm\n"
                 text += f"  Method: {result['method']}\n"
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
             elif 'mean_path_mm' in result:
                 # Desorption path results
-                text += f"  Mean path:   {result['mean_path_mm']:.2f} mm\n"
-                text += f"  Median path: {result['median_path_mm']:.2f} mm\n"
-                text += f"  Std dev:     {result['std_path_mm']:.2f} mm\n"
-                text += f"  Min path:    {result['min_path_mm']:.2f} mm\n"
-                text += f"  Max path:    {result['max_path_mm']:.2f} mm\n"
+                text += f"  Mean path:   {_f(result['mean_path_mm'])} mm\n"
+                text += f"  Median path: {_f(result['median_path_mm'])} mm\n"
+                text += f"  Std dev:     {_f(result['std_path_mm'])} mm\n"
+                text += f"  Min path:    {_f(result['min_path_mm'])} mm\n"
+                text += f"  Max path:    {_f(result['max_path_mm'])} mm\n"
                 text += f"  Samples:     {result['samples']}\n"
                 text += f"  Method:      {result['method']}\n"
                 text += f"  Accuracy:    {result['accuracy']}\n"
@@ -437,21 +447,21 @@ class StatisticsTabV2(QWidget):
 
             elif 'mass_g' in result:
                 if result['mass_g']:
-                    text += f"  Mass: {result['mass_g']:.4f} g\n"
-                    text += f"  Density: {result['density_g_cm3']:.2f} g/cm³\n"
+                    text += f"  Mass: {_f(result['mass_g'], '{:.4f}')} g\n"
+                    text += f"  Density: {_f(result['density_g_cm3'])} g/cm³\n"
                 else:
                     text += f"  Mass: N/A (mesh not watertight)\n"
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
             elif 'external_area_mm2' in result:
-                text += f"  External (with holes):  {result['external_area_mm2']:.2f} mm²\n"
-                text += f"  External (theoretical): {result['analytical_area_mm2']:.2f} mm²\n"
-                text += f"  Internal area:          {result['internal_area_mm2']:.2f} mm²\n"
-                text += f"  Total mesh area:        {result['total_area_mm2']:.2f} mm²\n"
+                text += f"  Ext. area (with holes): {_f(result['external_area_mm2'])} mm²\n"
+                text += f"  Ext. area (analytical): {_f(result['analytical_area_mm2'])} mm²\n"
+                text += f"  Internal surface area:  {_f(result['internal_area_mm2'])} mm²\n"
+                text += f"  Total surface area:     {_f(result['total_area_mm2'])} mm²\n"
 
                 # Requested: internal / total %
                 int_fraction = (result['internal_area_mm2'] / result['total_area_mm2'] * 100) if result['total_area_mm2'] > 0 else 0
-                text += f"  Internal fraction:      {int_fraction:.1f}%\n"
+                text += f"  Internal fraction:      {int_fraction:.1f}% (Internal/Total)\n"
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
         text += "=" * 70 + "\n"

@@ -8,6 +8,8 @@ scipy>=1.10.0
 # Mesh processing
 trimesh>=3.21.0
 scikit-image>=0.20.0
+shapely>=2.0.0
+rtree>=1.0.0
 
 # GUI
 PyQt6>=6.4.0

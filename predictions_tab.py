@@ -331,7 +331,12 @@ class PredictionsTab(QWidget):
             self.dp_text.setText("⚠ Cannot determine column dimensions")
             return
 
-        porosity = stats.get('porosity', 0.5)
+        porosity = stats.get('porosity')
+        if porosity is not None:
+            porosity /= 100.0 # Convert % to fraction
+        else:
+            porosity = 0.5
+
         total_sa = stats.get('surface_area', 1.0)
         external_sa = stats.get('external_area_mm2', 0)
         if external_sa == 0:
@@ -357,7 +362,11 @@ class PredictionsTab(QWidget):
             d_mm = self._geometry_params.dimensions.get('diameter', 2.0)
             total_vol = (4/3) * np.pi * (d_mm/2)**3
         else:
-            total_vol = stats.get('volume', 1.0) / (1 - porosity) if porosity < 1 else 1.0
+            solid_vol = stats.get('volume')
+            if solid_vol is not None and porosity < 1:
+                total_vol = solid_vol / (1 - porosity)
+            else:
+                total_vol = 1.0
 
         d_h_mm = calc_hydraulic_diameter(porosity, total_vol, internal_sa)
         d_h_m = d_h_mm / 1000.0
@@ -432,7 +441,11 @@ class PredictionsTab(QWidget):
 
         # Use hydraulic diameter for Van Deemter as well for consistency
         stats = self._basic_stats
-        porosity = stats.get('porosity', 0.5)
+        porosity = stats.get('porosity')
+        if porosity is not None:
+            porosity /= 100.0
+        else:
+            porosity = 0.5
         total_sa = stats.get('surface_area', 1.0)
         # External area estimation
         if self._geometry_params.shape == 'cylinder':
@@ -540,7 +553,11 @@ class PredictionsTab(QWidget):
         stats = self._basic_stats
 
         # Void volume in mm3 (uL)
-        porosity = stats.get('porosity', 0.5)
+        porosity = stats.get('porosity')
+        if porosity is not None:
+            porosity /= 100.0
+        else:
+            porosity = 0.5
         if self._geometry_params.shape == 'cylinder':
             d_mm = self._geometry_params.dimensions.get('diameter', 4.6)
             h_mm = self._geometry_params.dimensions.get('height', 50)
@@ -635,8 +652,13 @@ class PredictionsTab(QWidget):
             external_sa = total_sa * 0.15
         internal_sa = total_sa - external_sa
 
-        porosity = stats.get('porosity', 0.5)
-        solid_vol = stats.get('volume', 0)
+        porosity = stats.get('porosity')
+        if porosity is not None:
+            porosity /= 100.0
+        else:
+            porosity = 0.5
+
+        solid_vol = stats.get('volume') or 0
 
         # Container volume
         if self._geometry_params.shape == 'cylinder':
