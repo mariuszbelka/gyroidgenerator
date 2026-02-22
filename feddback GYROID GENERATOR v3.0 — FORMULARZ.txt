@@ -1,0 +1,668 @@
+# GYROID GENERATOR v3.0 — FORMULARZ TESTOWY
+# ============================================
+# Instrukcja: Przy każdym teście wpisz STATUS i KOMENTARZ
+# STATUS: OK | BUG | BŁĘDNY WYNIK | CRASH | NIE TESTOWAŁEM
+#
+# Przy każdej metryce opisana jest METODA OBLICZENIOWA.
+# Jeśli metoda jest zła/nieprecyzyjna — wpisz ZMIANA METODY
+# i opisz jak powinno być liczone.
+#
+# Po wypełnieniu — wklej cały plik do czatu Claude → v3.1
+# ============================================
+
+## PARAMETRY TESTOWE
+```
+Kształt:sphere          [np. sphere / cylinder / cube]
+Wymiar:2mm           [np. 2mm]
+Unit cell:0.2        [np. 0.5 mm]
+Wall thickness:0,06   [np. 0.15 mm]
+Quality:ultra          [Low / Medium / High / Ultra]
+```
+
+---
+
+## 1. GENEROWANIE MESHA
+
+### 1.1 Przycisk "Generate"
+- METODA: Marching cubes na siatce 3D, gyroid: cos(x)+cos(y)+cos(z)=t, maskowanie kształtem kontenera
+- STATUS:ok
+- Czas generacji: ok
+- Komentarz: nie testowałem bardzo dużych obiektów, przy bardzo dużych obiektach mogą być lagi i trzeba cierpiwości, ale to ok na razie
+
+### 1.2 Wyświetlanie w konsoli (logi)
+- STATUS: ok
+- Vertices / Faces / Watertight: ok, widze że display jest graniczone do 200000 faces i to jest też ok dla stabilności, vertices widze, watertight nie widzę. dobrze dodać do tego widoku. jest kosmetyczna zmiana w gui konieczna: jak powiększam okno, to nagłówek z przyciskami reset view, top front side plus opis face/vertices zajmuje zadużą część ekranu, trzeba dodać jakieś skalowanie, żeby nagłówek z przyciskami i opisem był dodatkiem a podgląd 3d zajmował teszte przestrzeni.
+- Komentarz: jak wyżej dodaj watertight yes/no i zmień skalowanie albo podziel gui w inny sposób w tym oknie.
+
+### 1.3 Export STL
+- METODA: trimesh.export() → binary STL
+- STATUS: ok
+- Rozmiar pliku: ok
+- Czy otwiera się w innym programie: tak, w chitubox, poprawnie
+- Komentarz: tu jest ok, ale oprócz eksportu dodaj w tym miejscu import stl, będę wgrywał tylko stl, któe wcześniej zrobiłem w tej aplikacji.
+
+---
+
+## 2. ZAKŁADKA: 3D VIEW
+
+### 2.1 Wyświetlanie mesha
+- METODA: pyqtgraph OpenGL — GLMeshItem, auto-decimation >200k faces
+- STATUS: ok
+- Komentarz: ok
+
+### 2.2 Obracanie (LPM) / Zoom (scroll) / Przesuwanie (PPM)
+- STATUS: ok
+- Komentarz: ok
+
+### 2.3 Reset View / Top / Front / Side
+- STATUS: ok
+- Komentarz: ok
+
+---
+
+## 3. ZAKŁADKA: STATISTICS — Instant Calculations
+
+### 3.1 Basic Stats (automatyczne po generacji)
+- METODA: trimesh — vertices/faces count, is_watertight, mesh.volume, mesh.area. Porosity = (V_container - V_mesh) / V_container × 100%
+- STATUS:
+- Porosity [%]: ok
+- Volume [mm³]: ok
+- Surface Area [mm²]: ok
+- Czy wartości mają sens: tak
+- ZMIANA METODY (jeśli potrzebna): nie
+- Komentarz: zostawiamy bez zmian
+
+### 3.2 Specific Surface Area (SSA)
+- METODA: SSA_vol = total_mesh_area [m²] / V_container [mL]. SSA_grav = total_mesh_area / mass. Uwaga: używa CAŁEJ powierzchni mesha (internal + external caps).
+- STATUS: ok
+- Volumetric [m²/mL]: ok
+- Gravimetric [m²/g]: nie
+- Czy wartości mają sens: w przeliczeniu na ml tak, na g nie
+- ZMIANA METODY (jeśli potrzebna):
+- Komentarz: nie znamy gęstości, więc nie możey przeliczyć na m2/g w tym miejscu. patrz p. 3.7 skorzystaj z wpisanej wartości gęstości i policz dopiero wtedy.
+
+### 3.3 Wall Thickness (Theoretical)
+- METODA: Bezpośrednio z parametru wejściowego wall_thickness. Brak obliczeń — wyświetla to co użytkownik podał.
+- STATUS: ok
+- Wartość [µm]: ok
+- ZMIANA METODY (jeśli potrzebna): nie
+- Komentarz: jest ok
+
+### 3.4 Channel Width (Theoretical)
+- METODA: channel = unit_cell - wall_thickness. Prosta aproksymacja — nie uwzględnia geometrii gyroidu.
+- STATUS: ok
+- Wartość [µm]: ok
+- ZMIANA METODY (jeśli potrzebna): nie
+- Komentarz: jest ok
+
+### 3.5 Distance to Edge (Theoretical)
+- METODA: Geometryczna aproksymacja: mean = R/2, max = R (kula); mean = R/2, max = R (cylinder). Nie uwzględnia struktury gyroidu — tylko odległość od centrum do ściany kontenera.
+- STATUS: ok
+- Wartość [mm]: ok
+- ZMIANA METODY (jeśli potrzebna): ta metryka nie ma dużego znaczenia - usunąć
+- Komentarz: usuwamy z aplikacji
+
+### 3.6 Tortuosity
+- METODA: Stała literaturowa τ = 1.41 dla gyroidu TPMS. Nie liczona z mesha.
+- STATUS: ok
+- Wartość τ: ok
+- ZMIANA METODY (jeśli potrzebna): metryka bez znaczenia, usuwamy
+- Komentarz: usuwamy z aplikacji
+
+### 3.7 Mass
+- METODA: mass = V_gyroid [cm³] × density [g/cm³]. Domyślna density = 1.05 g/cm³ (typowa żywica DLP).
+- STATUS: ok
+- Wartość [g]: ok
+- Density użyte: ok
+- ZMIANA METODY (jeśli potrzebna): tak
+- Komentarz: w oknie instant calculations dodaj pole z możliwością wpisania gęstości, wpisz wartość domyślną 1,05 g/cm3 ale pozwól zmienić wartość. w wynikach zwróć dla jakiej wartośći gęstości zostało to policzone.
+
+### 3.8 External Surface Area
+- METODA: External = pole powierzchni kontenera (4πr² dla kuli, 2πrh+2πr² dla cylindra). Internal = total_mesh_area - external. Fraction = external/total.
+- STATUS: dobrze zaimplementowana
+- External [mm²]: ok
+- Internal [mm²]: ok
+- External fraction [%]: ok
+- ZMIANA METODY (jeśli potrzebna): tak, obecna metoda nie uwzględnia dziur na powierzchni kuli, zewnętrzna ściana kuli jest przecież podziurawiona przez gyroid.
+- Komentarz: Geometria analityczna siatki (Detekcja ścian na granicy) – Najbardziej precyzyjna. Skoro masz już wczytany mesh w trimesh, możesz sprawdzić, które trójkąty (ściany siatki) leżą fizycznie na granicy Twojego kontenera, a które tworzą wewnętrzną, zakrzywioną strukturę gyroidu. Jak to działa w trimesh: Obliczasz odległość środka ciężkości każdego trójkąta (lub jego wierzchołków) od środka kuli (lub osi cylindra).Jeśli ta odległość jest równa (w granicach błędu, np. atol=1e-3) promieniowi $r$ kontenera, uznajesz tę ścianę za "External".Reszta to ściany "Internal".Zalety: Otrzymujesz rzeczywistą powierzchnię zewnętrzną z uwzględnieniem "dziur" w gyroidzie na powierzchni brzegowej. w wynikach zwracasz: powierzchnia zewnętrzna pomniejszona o dziury, powierzchnia zewnętrzna, powierzchnia całkowita, powierzchnia wewnętrzna/powierzchnia całkowita w %.
+
+---
+
+## 4. ZAKŁADKA: STATISTICS — Desorption Path
+
+### 4.1 Desorption Path — FAST Approximation
+- METODA: Voxelizacja mesha → identyfikacja solid voxeli → EDT (Euclidean Distance Transform) od każdego solid voxela do najbliższej krawędzi kontenera (boundary). Wynik = odległość × τ. Obejmuje WSZYSTKIE solid voxele (pełne pokrycie).
+- STATUS: ok
+- Mean path [mm]:
+- Median path [mm]:
+- Min path [mm]:
+- Max path [mm]:
+- Samples:
+- Czas [s]:
+- Czy min ≥ 0:
+- ZMIANA METODY (jeśli potrzebna): tak, patrz komentarz
+- Komentarz: Musimy zmienić sposób obliczania Desorption Path, ponieważ obecna metoda nie odzwierciedla zjawisk fizykochemicznych zachodzących podczas ekstrakcji i daje bezużyteczne wyniki.Co jest źle i dlaczego?Obecnie algorytm liczy odległość (EDT) od punktów wewnątrz struktury (solid voxels) aż do ścianek kontenera (boundary).Z punktu widzenia chemii to błąd: analit wewnątrz sorbentu (gyroidu) nie podróżuje przez całą litą strukturę aż do obudowy kontenera. On dyfunduje tylko do najbliższego pustego kanału (void / poru) wewnątrz samego gyroidu. Kiedy tylko dotrze do pustej przestrzeni, jest porywany przez eluent (rozpuszczalnik/gaz) i jego transport staje się błyskawiczny.Dlatego musimy mierzyć odległość z wnętrza stałej struktury gyroidu do jego własnej powierzchni (granicy faz ciało stałe - płyn), a nie do granic całej geometrii pojemnika. Interesuje nas po prostu "grubość ścianki", z której analit musi się wydostać. Usuwamy też mnożnik $\tau$ (tortuosity), bo wewnątrz litej ścianki analit porusza się po prostej.Jak to naprawić? (Opcja 1 - Voxel-based EDT)Zamiast traktować brzeg kontenera jako punkt docelowy, punktem docelowym dla transformaty EDT ma być najbliższy pusty woksel (void).Oto kroki do implementacji:Wokselizujemy mesh gyroidu, uzyskując macierz 3D (np. 1 = ciało stałe / solid, 0 = pusta przestrzeń / void).Przekazujemy tę macierz do funkcji scipy.ndimage.distance_transform_edt.Uwaga: EDT domyślnie liczy odległość tła (0) do najbliższej wartości (1). Ponieważ my chcemy odległość z wnętrza punktu stałego (1) do pustki (0), musimy odwrócić maskę lub parametry funkcji.Po wykonaniu EDT na odwróconej masce, macierz wynikowa będzie zawierać odległości euklidesowe od każdego stałego woksela do najbliższego pustego kanału.Pobieramy wartości tylko dla voxeli będących ciałem stałym (aby nie psuć statystyk zerami z kanałów) i z nich liczymy statystyki (mean, median, min, max). Parametr Max path jest dla mnie najważniejszy.
+
+### 4.2 Desorption Path — SAMPLING (Monte Carlo)
+- METODA: Jak FAST, ale losuje N punktów z solid voxeli zamiast brać wszystkie. Szybsze dla dużych meshów, mniej dokładne.
+- STATUS: ok
+- Samples wybranych:
+- Mean path [mm]:
+- Czas [s]:
+- ZMIANA METODY (jeśli potrzebna): tak, patrz komentarz
+- Komentarz: Oto gotowa, uporządkowana wiadomość, którą możesz skopiować i wysłać swojemu programiście. Wyjaśnia ona problem z perspektywy domeny (chemii) oraz optymalizacji kodu, a także podaje konkretne rozwiązanie.Cześć,Musimy zaktualizować logikę dla metody "4.2 Desorption Path — SAMPLING (Monte Carlo)". Obecna implementacja liczy coś, co z punktu widzenia chemii i fizyki procesu ekstrakcji jest błędne, a dodatkowo prawdopodobnie nie daje zysku wydajnościowego, którego oczekujemy od metody opartej na próbkowaniu.Poniżej znajdziesz podsumowanie: dlaczego, co i jak musimy zmienić.1. DLACZEGO to zmieniamy?Błąd domenowy (Chemia): Obecnie algorytm liczy odległość od punktów wewnątrz struktury (gyroidu) aż do zewnętrznych ścian kontenera (np. ścianek cylindra). W rzeczywistości analit uwięziony w sorbencie nie podróżuje przez całą litą strukturę. Wystarczy, że przedostanie się do najbliższego pustego kanału wewnątrz gyroidu (poru), skąd jest natychmiast wymywany przez rozpuszczalnik. Interesuje nas więc "grubość ścianki" wokół danego punktu.Błąd optymalizacyjny (Informatyka): Jeśli metoda "SAMPLING" opiera się na tym, że najpierw robimy pełną transformatę EDT (jak w metodzie FAST), a dopiero potem losujemy z niej $N$ punktów, to tracimy cały sens Monte Carlo. EDT i tak musi przeliczyć całą macierz w pamięci RAM, co przy ogromnych siatkach będzie wąskim gardłem. Metoda SAMPLING ma oszczędzać pamięć i czas unikając pełnych obliczeń.2. CO dokładnie zmieniamy?Cel dystansu: Zmieniamy punkt docelowy z "granica kontenera" na "najbliższa powierzchnia wewnętrzna gyroidu" (granica faz solid-void).Podejście algorytmiczne: Całkowicie omijamy pełną transformatę EDT (scipy.ndimage.distance_transform_edt). Zamiast tego losujemy $N$ punktów wewnątrz struktury i bezpośrednio dla nich liczymy odległość do najbliższego elementu siatki (mesha) lub do chmury punktów brzegowych za pomocą drzew KD.3. W JAKI SPOSÓB to zaimplementować? (Rozwiązanie w Pythonie)Najlepsze i najmniej obciążające pamięć podejście dla dużych struktur używa biblioteki trimesh (moduł proximity) lub scipy.spatial.cKDTree.Krok 1: Losowanie punktów (Sampling)Generujemy losowe współrzędne wewnątrz Bounding Boxa naszego mesha, a następnie filtrujemy je tak, aby zostawić tylko te $N$ punktów, które fizycznie znajdują się wewnątrz "litego" materiału (solid).Możesz tu użyć trimesh.ray.RayMeshIntersector.contains_points(mesh, random_points) lub – jeśli to zbyt wolne – szybko zwokselizować mesh na niskiej/średniej rozdzielczości i wylosować $N$ wokseli oznaczonych jako ciało stałe.Krok 2: Szukanie odległości do powierzchni (Closest point / KDTree)Dla przefiltrowanych $N$ punktów szukamy odległości do najbliższej ściany mesha.Opcja A (Czysty trimesh - bezpośrednio na siatce trójkątów):Pythonfrom trimesh.proximity import closest_point
+import numpy as np
+
+# 'mesh' to wczytany obiekt gyroidu
+# 'solid_samples' to tablica numpy (N, 3) z punktami wylosowanymi wewnątrz materiału
+
+# Funkcja closest_point znajduje najkrótszą odległość euklidesową od każdego
+# z naszych N punktów do najbliższego trójkąta siatki (czyli granicy faz).
+closest_points, distances_mm, triangle_ids = closest_point(mesh, solid_samples)
+
+# Z tablicy 'distances_mm' wyciągamy statystyki:
+mean_path = np.mean(distances_mm)
+max_path = np.max(distances_mm) # Szacunkowa grubość krytyczna
+min_path = np.min(distances_mm)
+Opcja B (Jeśli wolisz pracować na wokselach z użyciem KDTree dla szybkości):Pythonfrom scipy.spatial import cKDTree
+import numpy as np
+
+# 1. Mając macierz wokseli, znajdź woksele brzegowe (te, które stykają się z pustką)
+# (Można to zrobić prostym konwolucyjnym filtrem krawędzi lub erozją z scipy.ndimage)
+boundary_voxels_coords = ... # Współrzędne (X,Y,Z) wokseli na granicy faz
+
+# 2. Budujemy drzewo KD z wokseli brzegowych
+kdtree = cKDTree(boundary_voxels_coords)
+
+# 3. Odpytujemy drzewo o odległość dla wylosowanych N punktów z wnętrza (solid)
+distances, indices = kdtree.query(solid_samples)
+
+# 'distances' mnożymy przez rozmiar woksela, żeby mieć wynik w [mm]
+distances_mm = distances * voxel_size
+
+### 4.3 Export CSV
+- METODA: UTF-8 BOM encoding, parametry + wyniki do pliku CSV
+- STATUS: ok
+- Czy plik się otwiera w Excel: tak
+- Komentarz: wszytsko ok
+
+---
+
+## 5. ZAKŁADKA: PREDICTIONS
+
+### 5.0 Panel kontrolny
+- Czy dropdown Solvent działa: tak
+- Czy dropdown Analyte działa: tak
+- Czy Manual D_mobile działa: tak
+- Czy D_polymer spinbox działa: tak
+- Czy Flow rate spinbox działa: tak
+- Komentarz:
+
+### 5.1 Pressure Drop (ΔP)
+- METODA: Kozeny-Carman: ΔP = (150 × η × u × L) / (d_h² × ε³). d_h = 4εV/S_internal (hydraulic diameter). u = F/A_column. Presety lepkości (7 solventów, 25°C). K_KC=150 (Blake-Kozeny standard). Ref: Kozeny 1927, Carman 1937.
+- STATUS:
+- ΔP [bar]:
+- Solvent:
+- Flow rate [µL/min]:
+- Permeability [m²]:
+- Czy wykres ΔP vs flow:
+- Czy wartości sensowne:
+- ZMIANA METODY (jeśli potrzebna): tak, jak w komentarzu
+- Komentarz: Cześć,
+
+Musimy przebudować moduł 5.1 Pressure Drop. Obecna implementacja równania Kozeny-Carmana jest błędna matematycznie i nie pasuje do naszej geometrii (gyroid). Dodatkowo wykres źle reaguje na nasze wyniki.
+
+1. Błędne równanie (Fix matematyczny)
+Użyto hybrydowego wzoru: ΔP = (150 × η × u × L) / (d_h² × ε³)
+Ten wzór miesza parametry złóż sferycznych z monolitami. Stała 150 dotyczy ułożonych kulek. Dla struktur monolitycznych (jak nasz gyroid), opór przepływu liczy się z uogólnionego prawa Darcy'ego połączonego z modelem kapilarnym.
+
+Proszę, zmień wzór na uogólnione równanie dla monolitów oparte na średnicy hydraulicznej:
+ΔP = (K_geom × η × u_superficial × L) / (d_h² × ε)
+
+K_geom: Stała geometryczna (opór kształtu i krętości). Wprowadź ją jako zmienną z domyślną wartością 32 (odpowiada to modelowi prostych kapilar Hagen-Poiseuille'a, co jest dobrym punktem wyjścia. Gyroidy często oscylują wokół 30-50). Zamiast 150 z kulek, dajmy userowi ewentualnie edytować ten parametr jako Geometry Resistance Factor.
+
+Zauważ zmianę mianownika – zniknęło ε³ na rzecz samego ε, co jest właściwe po przejściu na d_h i u_superficial.
+
+2. Optymalizacja UI i Wykresu (Kwestia UX)
+
+Zwróć uwagę na sekcję wyników: ΔP = 0.00 bar. Pompujemy przepływ nano-LC (0.1 uL/min) przez wielkie kanały (148 um). Ciśnienie wynosi tu zapewne ułamek milibara.
+
+Problem: Wykres osi Y jest zablokowany/wyskalowany do 1000 bar (UHPLC). Przy naszych wielkościach drukowanych 3D linii w ogóle nie widać.
+
+Rozwiązanie: Oś Y musi być dynamiczna (auto-scaling) w zależności od wartości max(ΔP). Jeśli najwyższe ciśnienie dla zadanego flow to np. 0.01 bar, niech wykres pokazuje od 0 do 0.015 bar. Limit HPLC (400 bar) narysuj tylko wtedy, gdy dynamiczna skala osi Y do niego dociera. W przeciwnym razie usuń z widoku te limity, bo zaciemniają obraz.
+
+Upewnij się, że jednostki we wzorze grają: η w [Pa*s], u w [m/s], L w [m], d_h w [m]. Wynik wyjdzie w Paskalach (Pa). Na bar przeliczamy dzieląc przez 100 000. Aby uniknąć zer w UI przy niskich ciśnieniach, jeśli wynik jest < 0.1 bar, wyświetlaj go w [mbar].
+
+### 5.2 Van Deemter / HETP
+- METODA: H = A + B/u + (C_s + C_m)×u.
+  A = 2λ×d_p, λ=0.5 (gyroid regularna struktura), d_p=unit_cell.
+  B = 2γ×D_m, γ=0.6 (obstruction factor).
+  C_s = (2/3) × k/(1+k)² × d_f²/D_polymer, d_f=wall/2, k=2.0 (domyślny retention factor).
+  C_m = f(k) × d_c²/D_mobile, f(k)=(1+6k+11k²)/(96(1+k)²) Golay.
+  u_opt = √(B/C), H_min = A + 2√(BC).
+  Ref: van Deemter 1956, Knox 1999, Golay 1958, Aris 1956.
+- STATUS: działa, ale złą teroia
+- H_min [µm]:
+- u_opt [mm/s]:
+- N/m:
+- Dominant term:
+- Analyte:
+- Czy wykres H vs u:
+- Czy rozbicie A/B/Cs/Cm widoczne:
+- Czy wartości sensowne (H_min 10-1000 µm):
+- ZMIANA METODY (jeśli potrzebna — np. λ, γ, k, d_p, d_f): tak
+- Komentarz: Moduł 5.2 Van Deemter świetnie pokazuje to, co najważniejsze (dominację oporów w ściance polimeru), ale matematycznie to "Frankenstein". Posklejaliśmy równania dla złóż kulkowych i pustych kapilar, co dla naszego gyroidu (struktury przypominającej uporządkowany monolit) jest błędem.Proszę o wprowadzenie dwóch korekt do wzorów, aby dopasować je do charakterystyki struktur drukowanych w 3D (TPMS):1. Naprawa członu A (Eddy Diffusion):Wzór A = 2 * λ * d_p jest ok, ale domyślna wartość λ = 0.5 dotyczy sypkich złóż kulkowych (chaotycznych ścieżek). Gyroid jest strukturą regularną, więc zjawisko rozmycia wirowego jest w nim ułamkiem tego, co w tradycyjnej kolumnie.Zmiana: Ustaw domyślne λ = 0.1 (zamiast 0.5). Pozostaw d_p = unit_cell jako długość charakterystyczną.2. Naprawa członu $C_m$ (Mobile Phase Mass Transfer):Aktualnie używasz modyfikacji Golaya: C_m = f(k) * d_c² / D_mobile. Równanie Golaya służy wyłącznie do pustych rurek (kapilar). Gyroid to sieć kanałów zbliżona hydrodynamiką do monolitu.Zmiana: Zastąp wzór Golaya powszechnie akceptowanym uproszczeniem dla struktur monolitycznych, bazującym na średnicy hydraulicznej (d_h):C_m = ω * (d_h² / D_mobile)Gdzie ω (omega) to współczynnik strukturalny przenoszenia masy dla fazy ruchomej. Ustaw domyślnie ω = 0.1 (typowy rząd wielkości dla porowatych struktur ciągłych). Jeśli znasz retencję k, można to rozwinąć do ω = (c * k²) / (1+k)², ale stała wartość 0.1 na tym etapie symulacji będzie o wiele sensowniejsza niż wzór na pustą rurę.3. Sugestia dla UI:W tooltipie przy "N/m" lub "N = 5" warto dodać adnotację: (Note: For SPE/extraction applications, low N values are common and acceptable compared to analytical HPLC). Oszczędzi to zawału serca użytkownikom z tłem chromatograficznym.Reszta równania (zwłaszcza człon $C_s$) zostaje i działa super!
+
+### 5.3 Desorption Time
+- METODA: Dwuetapowy model:
+  1) t_wall = (wall/2)² × α / D_polymer — dyfuzja Cranka z płaskiej płytki (symetryczna, obie strony). α: 50%=0.049, 90%=0.660, 95%=0.897, 99%=1.270, 99.9%=1.88. Ref: Crank 1975, eq. 4.18.
+  2) t_channel = mean_desorption_path² / (2 × D_eff), D_eff = D_mobile/τ².
+  3) t_total = t_wall + t_channel.
+  Rate-limiting = który etap dominuje.
+- STATUS:
+- t_wall 90%:
+- t_channel:
+- t_total 90%:
+- t_total 99%:
+- Rate-limiting:
+- D_polymer użyte:
+- Czy sensowne (sekundy-minuty dla SPE):
+- ZMIANA METODY (jeśli potrzebna — np. model ścianki, współczynniki α): tak
+- Komentarz: Analiza modułu 5.3 Desorption Time. Mamy tu sprzeczność fizykochemiczną. Moduł Van Deemtera słusznie pokazuje, że to dyfuzja wewnątrz stałego polimeru jest naszym "wąskim gardłem", a tutaj wychodzi nam, że transport w kanale (cieczy) trwa najdłużej.Problemem jest sposób, w jaki liczymy t_channel. W ekstrakcji przepływowej (SPE) analit nie dyfunduje powoli przez płyn w kanale. Gdy tylko dotrze do granicy faz (wyjdzie z polimeru), jest wymywany mechanicznie przez przepływ cieczy (konwekcję). Transport w kanale to po prostu czas przebywania (residence time) płynu w kolumnie.Proszę o przebudowanie logiki dwuetapowej w następujący sposób:1. Zostawiamy t_wall (Model Cranka jest tu świetny)Równanie t_wall = (wall/2)² × α / D_polymer bardzo dobrze symuluje czas potrzebny na ucieczkę analitu z litego szkieletu. (Upewnij się tylko, że parametry $\alpha$ dla flat-plate diffusion wg Cranka są zaimplementowane poprawnie, zazwyczaj dla 90% uwalniania z płytki o całkowitej grubości $L$, $Fo \approx 0.049$, ale dla pół-grubości jest inaczej – przyjmuję, że masz to poprawnie z tablic wyciągnięte).2. Zmieniamy całkowicie t_channel na t_sweep (Czas wymywania)Usuwamy stary wzór na dyfuzję wzdłużną w kanale. Zamiast tego liczymy, jak szybko rozpuszczalnik omiata objętość struktury (czas, w którym złoże jest "płukane").Wzór: t_sweep = Void_Volume / Flow_RateGdzie Void_Volume to objętość pustych kanałów w kolumnie (w uL lub mm³), a Flow_Rate to przepływ (w uL/min).Ewentualnie przez prędkość: t_sweep = L_column / u_interstitial.Wynik to zazwyczaj ułamki sekund lub pojedyncze sekundy (czyli zgodnie z prawdą, to NIE JEST wąskie gardło).3. Zmiana obliczeń finałowych i UI:t_total_90% = t_wall_90% + t_sweep (Tak samo dla 99%).W ten sposób wykres naturalnie pokaże, że transport w fazie ruchomej (t_sweep) to malutki słupek, a gigantycznym ogranicznikiem jest "Wall diffusion" (Czerwony słupek urośnie do rangi dominującego).Rate-limiting step automatycznie zacznie poprawnie wskazywać na "Wall diffusion".Zmień nazwę na wykresie z "Channel transport" na "Convective Sweep (Channel)".Taka zmiana sprawi, że ten moduł będzie potężnym narzędziem dla chemika: powie nam wprost: "Z powodu grubości wydrukowanych ścianek musisz przepuszczać eluent przez co najmniej 4 minuty, inaczej nie odzyskasz analitu". Sprawdziłem implementację współczynników $\alpha$ (które w tym równaniu są bezwymiarową liczbą Fouriera, $Fo$) z modelem Cranka dla płaskiej płytki i musimy je zaktualizować.Aktualnie wartości są niespójne. Wartość dla 50% (0.049) to $Fo$ wyliczone dla całkowitej grubości ścianki, ale Twój wzór słusznie używa połowy grubości (wall/2)². Pozostałe wartości (np. 0.660 dla 90%) nie pasują do analitycznych rozwiązań tego równania różniczkowego.Aby wzór t_wall = (wall/2)² × α / D_polymer dawał poprawne chemicznie wyniki, $\alpha$ musi przyjmować poniższe wartości wyliczone dla połowy grubości ($l$):50%: $\alpha = 0.196$90%: $\alpha = 0.848$95%: $\alpha = 1.129$99%: $\alpha = 1.781$99.9%: $\alpha = 2.715$Zaktualizuj proszę te stałe w słowniku/presetach. Dzięki temu czas desorpcji wzrośnie (co jest zgodne z fizyką grubych polimerów z druku 3D) i zacznie się poprawnie pokrywać z modelem Van Deemtera. Oto gotowy mail do programisty, który jasno wyjaśnia, co i dlaczego trzeba dodać w interfejsie:
+
+Temat: Aktualizacja UI dla modułów 5.2 i 5.3 – Presety dla D_polymer (współczynnik dyfuzji)
+
+Cześć,
+
+Mam prośbę o drobną, ale bardzo ważną z punktu widzenia chemii zmianę w interfejsie użytkownika. Chodzi o pole wprowadzania wartości D_polymer (współczynnika dyfuzji w polimerze), które wykorzystujemy w obliczeniach Van Deemtera i czasu desorpcji.
+
+Obecnie domyślna wartość to 1.00e-11 m²/s. W rzeczywistości taka wartość odpowiada tylko bardzo miękkim hydrożelom lub materiałom z dużą nanoporowatością. My drukujemy w technologii DLP z litych, mocno usieciowanych metakrylanów bez porogenu. W takim materiale dyfuzja jest o rzędy wielkości wolniejsza.
+
+Aby ułatwić pracę i zapobiec wpisywaniu nierealistycznych danych, proszę o dodanie rozwijanej listy (dropdown) z presetami dla D_polymer, ale z zachowaniem możliwości ręcznego wpisania własnej wartości (tzw. pole combo box lub opcja "Custom").
+
+Proponowane presety do dodania:
+
+Porous / Hydrogel (szybka dyfuzja)
+Wartość: 1.00e-11 m²/s
+
+Swollen Resin (żywica spuchnięta rozpuszczalnikiem, np. w metanolu)
+Wartość: 1.00e-13 m²/s
+
+Solid Crosslinked Resin (standardowy lity wydruk DLP, silnie usieciowany)
+Wartość: 1.00e-15 m²/s
+
+Custom... (Pozwala użytkownikowi wpisać dowolną wartość w notacji naukowej, np. 5.00e-14)
+
+Dzięki tym presetom aplikacja od razu pokaże (szczególnie na wykresie w module 5.3), jak gigantyczną barierą jest lity polimer w porównaniu do materiałów porowatych, co jest kluczowe dla naszych dalszych badań.
+
+### 5.4 Binding Capacity
+- METODA: Q_vol = ASA × q_surface × accessibility / V_container [mg/mL]. Q_mass = Q_vol × V_container / mass [mg/g]. ASA = dostępna powierzchnia (z mesha lub probe-based). q_surface = gęstość wiązania [mg/m²] — input użytkownika. accessibility = współczynnik dostępności (0-1) — input użytkownika.
+- STATUS: ok
+- Q_vol [mg/mL]:
+- Q_mass [mg/g]:
+- Total [mg]:
+- q_surface użyte:
+- accessibility użyte:
+- Czy realistyczne:
+- ZMIANA METODY (jeśli potrzebna):
+- Komentarz: Moduł 5.4 Binding Capacity – świetna robota! Logika i wzory (Q_vol = ASA × q_surface × accessibility / V_container) są w 100% poprawne fizykochemicznie dla litych struktur drukowanych w 3D, gdzie adsorpcja zachodzi tylko na powierzchni.
+
+Mam tylko dwie drobne prośby z zakresu UX (User Experience), aby użytkownicy nie wpadli w panikę, widząc bardzo małe wyniki:
+
+Tooltip / Podpowiedź dla q_surface: Użytkownicy często nie mają intuicji, ile wynosi gęstość wiązania w [mg/m²]. Dodaj proszę podpowiedź (ikonka "i" obok pola):
+"Typical theoretical monolayer capacity for small organic molecules is ~0.5 - 2.0 mg/m² depending on molecular weight and orientation." Dzięki temu nie będą wpisywać z kosmosu wartości rzędu 1000 mg/m², oczekując wyników jak z klasycznego SPE.
+
+Masa sorbentu (mass): Upewnij się tylko, że zmienna mass użyta w równaniu do wyliczenia Q_mass jest liczona jako rzeczywista objętość szkieletu gyroidu z mesha pomnożona przez gęstość polimeru (mesh.volume * polymer_density), a nie jako całkowita objętość kontenera.
+
+Poza tym – niczego nie zmieniaj w równaniach, jest idealnie!
+Moduł 5.4 Binding Capacity liczy wszystko w 100% poprawnie. Wyniki rzędu ułamków mikrograma są fizycznie poprawne dla litych wydruków 3D.
+
+Aby jednak użytkownik (chemik) nie pomyślał, że to "bug" programu, dodajmy dwa małe ulepszenia w wyświetlaniu wyników:
+
+1. Dynamiczne skalowanie jednostek i usuwanie zer
+Wynik 0.10 µg (0.0001 mg) wygląda trochę topornie. Jeśli wartość w mg spada poniżej 0.01, przestańmy pokazywać mg.
+
+Zrób auto-skalowanie: jeśli masa < 1 µg, pokaż wynik w ng (nanogramach).
+
+Zamiast 0.10 µg (0.0001 mg) wyświetl po prostu: 100 ng (0.10 µg). Będzie to znacznie czytelniejsze dla analityków pracujących na stężeniach śladowych.
+
+2. Automatyczny "Verdict" (Wniosek)
+Dodajmy pod spodem krótką linijkę z automatyczną interpretacją wyniku (bazującą na wartości Total capacity), która od razu powie chemikowi, do czego nadaje się ta kolumienka:
+
+Jeśli Total capacity < 1 µg:
+Wniosek: "Ultra-trace analysis / Micro-extraction only. Capacity is extremely low due to non-porous solid walls."
+
+Jeśli Total capacity jest w przedziale 1 µg - 100 µg:
+Wniosek: "Analytical scale. Suitable for highly sensitive detectors (MS/MS, fluorescence)."
+
+Jeśli Total capacity > 100 µg:
+Wniosek: "Preparative / Standard SPE scale."
+
+3. Formatowanie "Reference values"
+Tabela referencyjna jest super. Upewnij się tylko, że jednostki się zgadzają z tym, co liczymy wyżej (masz tam mg/mL, więc porównujemy to do naszego Volumetric: 0.023 mg/mL). Kolosalna różnica (0.023 vs 10-40) uświadomi użytkownikom, jak bardzo brakuje im porowatości.
+
+### 5.5 Export CSV (Predictions)
+- STATUS: ok
+- Komentarz: ok
+
+---
+
+## 6. ZAKŁADKA: DISTRIBUTIONS
+
+### 6.0 Panel kontrolny
+- Czy checkboxy działają:
+- Czy voxels/unit_cell spinbox działa:
+- Czy printer pixel spinbox działa [µm]:
+- Komentarz:
+
+### 6.1 Wall Thickness Distribution
+- METODA: Voxelizacja → EDT na fazie solid → local maxima (centra ścian) → wall_thickness = 2 × inscribed_sphere_radius. Metoda Hildebrand & Rüegsegger 1997. Uniformity = 1 - (std/mean).
+- STATUS:
+- Mean [µm]:
+- Std [µm]:
+- Min / Max [µm]:
+- P10 / P50 / P90:
+- Uniformity:
+- Czy histogram się pojawił:
+- Czy mean ≈ design wall thickness:
+- Czas:
+- ZMIANA METODY (jeśli potrzebna): tak
+- Komentarz: Mamy sprzętowy impas przy 6.1 Wall Thickness Distribution. Limit 30 wokseli na komórkę generuje potężny błąd kwantyzacji (schodkowy histogram), a nie możemy go podnieść do 100, bo algorytm $O(N^3)$ zabije nam RAM (Out of Memory).Musimy porzucić metodę Hildebranda opartą na EDT / wokselach dla tego modułu i przejść na analizę bezpośrednio na siatce (Mesh-based Ray Casting). Jest to rozwiązanie ciągłe, niezależne od rozdzielczości siatki wokseli i zajmuje ułamek megabajta pamięci!Oto jak to zaimplementować w trimesh w kilku liniach:Próbkowanie powierzchni: Losujemy np. $N = 10 000$ punktów na powierzchni naszego gyroidu.Pythonpoints, face_indices = trimesh.sample.sample_surface(mesh, 10000)
+Wektory normalne: Pobieramy wektory normalne dla tych trójkątów. Z definicji w dobrze zrobionym meshu normalne "patrzą" na zewnątrz (w stronę kanałów). My odwracamy je o 180 stopni (mnożymy przez -1), aby celowały w głąb naszej ścianki z polimeru.Pythonnormals = mesh.face_normals[face_indices]
+ray_directions = -normals
+Ray Casting (Strzelanie promieniami): Przesuwamy nasze punkty startowe o minimalny epsilon w głąb materiału (np. o 1e-5 mm, żeby promień nie zderzył się z własnym trójkątem startowym), a następnie puszczamy algorytm śledzenia promieni.Pythonray_origins = points + (ray_directions * 1e-5)
+
+# Wykorzystujemy wbudowany intersector do znalezienia pierwszego trafienia
+locations, index_ray, index_tri = mesh.ray.intersects_location(
+    ray_origins=ray_origins,
+    ray_directions=ray_directions,
+    multiple_hits=False
+)
+Obliczenie grubości (Dystans): Grubość ścianki w danym punkcie to po prostu odległość euklidesowa między punktem startowym a punktem uderzenia promienia w przeciwległą ścianę wewnątrz materiału.Python# Należy pogrupować wyniki (index_ray), ponieważ niektóre promienie
+# mogły wylecieć poza bounding box, ale dla prawidłowych trafień:
+distances = np.linalg.norm(locations - ray_origins[index_ray], axis=1)
+Tablica distances to nasza płynna dystrybucja grubości ścianki (w milimetrach lub mikrometrach). Z niej wyciągasz Mean, Std, P10, P50, P90 i rysujesz histogram. Histogram z tej metody będzie wyglądał jak prawdziwy, ładny rozkład normalny (Gaussa) i idealnie odda fizykę druku 3D!
+
+### 6.2 Channel Width Distribution
+- METODA: Identyczna jak wall thickness ale na fazie void (EDT na void → local maxima → channel_width = 2 × radius). Hildebrand & Rüegsegger 1997.
+- STATUS:
+- Mean [µm]:
+- Min / Max [µm]:
+- Czy histogram się pojawił:
+- Czy mean ≈ unit_cell - wall:
+- Czas:
+- ZMIANA METODY (jeśli potrzebna): tak
+- Komentarz: Zgadza się, w 6.2 Channel Width Distribution mamy powtórkę z rozrywki – algorytm EDT na wokselach znowu wpadł w pułapkę kwantyzacji (widzimy pojedyncze piki zamiast krzywej Gaussa).
+
+Dodatkowo mamy tu problem z warunkami brzegowymi (Boundary Conditions). Wartość Max to aż 1452.4 µm, co oznacza, że EDT dla pustej przestrzeni "wyciekło" poza strukturę gyroidu na jej brzegach i policzyło pustkę aż do granicy bounding boxa.
+
+Rozwiązanie jest proste – użyjmy dokładnie tej samej metody Ray Castingu (na siatce trójkątów), o którą prosiłem przy Wall Thickness, ale z odwróconym kierunkiem!
+
+Jak to zmodyfikować dla Channel Width:
+
+Losujemy punkty na powierzchni mesha (tak samo jak wcześniej).
+
+Pobieramy wektory normalne. Tym razem NIE odwracamy ich znaku. Prawidłowe normalne w meshu są skierowane na zewnątrz materiału, czyli dokładnie w środek naszych pustych kanałów.
+
+Python
+ray_directions = normals # strzelamy w pustą przestrzeń
+Przesuwamy punkt startowy o epsilon w stronę kanału i strzelamy.
+
+Python
+ray_origins = points + (ray_directions * 1e-5)
+locations, index_ray, index_tri = mesh.ray.intersects_location(...)
+Zabezpieczenie przed Edge Effect (Kluczowe!): Promienie, które wylecą poza gyroid (np. wystrzelone z trójkątów leżących na zewnętrznej krawędzi cylindra w pustą przestrzeń) po prostu w nic nie trafią. Funkcja intersects_location ich nie zwróci. Dzięki temu całkowicie pozbędziemy się tych fałszywych, gigantycznych wartości z brzegów, a tablica trafień da nam idealny rozkład szerokości kanałów wewnątrz złoża!
+
+Zastosowanie Ray Castingu dla obu tych modułów (Wall i Channel) całkowicie uniezależni nas od rozdzielczości wokseli i oszczędzi mnóstwo RAM-u.
+
+### 6.3 Connectivity Analysis
+- METODA: scipy.ndimage.label z 26-connectivity (full 3D) na void voxelach. Through-connected = komponenty dotykające Z_min I Z_max jednocześnie. Dead-end = dotykają tylko jednej strony. Isolated = zamknięte (nie dotykają żadnej). Connected porosity = (through_voxels / total_void_voxels) × porosity.
+- STATUS:
+- N components:
+- Through-connected [%]:
+- Dead-end [%]:
+- Isolated [%]:
+- Connected porosity:
+- Czy sensowne (through > 90% dla gyroidu):
+- ZMIANA METODY (jeśli potrzebna — np. analiza XY zamiast Z, wielokierunkowa):
+- Komentarz: Moduł Connectivity Analysis zadziałał idealnie! Algorytm scipy.ndimage.label ze zdefiniowaną 26-łącznością poprawnie udowodnił, że struktura gyroidu jest w 100% bikontynuiczna (brak topologicznych wysp i odciętych bąbli). Wynik "1 Component" jest w 100% poprawny.
+
+Mam tylko jedną prośbę o zmianę nazewnictwa w interfejsie (UX), aby nie mylić chemików:
+
+Zmieńmy tytuł modułu z "Connectivity Analysis" na "Topological Connectivity (Voxel-based)".
+
+Dodajmy w UI mały tooltip (ikonkę info) z tekstem: "Note: This module checks for continuous topological paths (islands/bubbles). It does not calculate hydrodynamic dead volumes (stagnant flow zones) at the column walls."
+
+Dzięki temu użytkownik (chemik) nie założy błędnie, że 100% through-connected oznacza idealny, bezoporowy przepływ w każdym zakamarku kolumny.
+
+Sama implementacja (i czas 0.4s dla 24 milionów wokseli) to świetna robota!
+
+### 6.4 Accessible Surface Area (ASA)
+- METODA: Erozja binarna void space o promień sondy (w voxelach) → przeliczenie surface area po erozji. Sondy: 0, 1, 2, 5, 10 nm. ASA_fraction = area_po_erozji / area_bez_erozji. Wynik = ile powierzchni jest dostępne dla cząsteczki o danym promieniu.
+- STATUS:
+- ASA probe 0 nm:
+- ASA probe 1 nm:
+- ASA probe 5 nm:
+- ASA probe 10 nm:
+- Czy wykres ASA vs probe:
+- Czy ASA maleje ze wzrostem probe:
+- ZMIANA METODY (jeśli potrzebna — np. inne promienie sond): tak
+- Komentarz: Moduł 6.4 Accessible Surface Area (ASA) uległ cichej awarii z powodu konfliktu skali. Erozja binarna nic nie robi (daje 100% i zajmuje 0.0s), ponieważ nasze sondy są w nanometrach (1-10 nm), a jeden woksel symulacji to dziesiątki mikrometrów. Wokselizacja ucina promień erozji do 0.
+
+Poza tym, z punktu widzenia fizykochemii litych wydruków 3D, badanie dostępu nanometrowych cząsteczek do makroskopowych kanałów gyroidu mija się z celem (zawsze będzie to ~100%).
+
+Jak to naprawić i nadać temu analityczny sens?
+Zmieńmy ten moduł z analizy na poziomie molekularnym na symulację "Particulate Accessibility" (odporność na zatykanie kolumny zanieczyszczeniami/osadem).
+
+Zmień jednostki sondy (probe) z nanometrów [nm] na mikrometry [µm].
+
+Ustaw nowe wielkości sond: 10, 20, 50, 100 µm. (To odpowiada wielkościom komórek krwi, agregatów białkowych czy drobin osadu z próbek środowiskowych).
+
+Erozja o 50 µm na naszej siatce (gdzie woksel to ~13 µm) to już erozja o 3-4 woksele, więc algorytm zadziała poprawnie!
+
+Wykres wreszcie zacznie ładnie opadać ze wzrostem wielkości sondy, pokazując nam, jaka część powierzchni kolumny jest wciąż obmywana przez próbkę, gdy w roztworze znajdują się duże zanieczyszczenia stałe.
+
+### 6.5 Throat / Constriction Analysis
+- METODA: EDT na void → ekstrakcja medial axis (local maxima w distance transform) → szukanie local minima na medial axis = throats (przewężenia). Throat diameter = 2 × min_radius. Throat-to-pore ratio = mean_throat / mean_channel.
+- STATUS:
+- Mean throat [µm]:
+- Min throat [µm]:
+- P10 / P50 / P90:
+- Throat-to-pore ratio:
+- Czy histogram się pojawił:
+- Czy ostrzeżenia (<30 µm):
+- ZMIANA METODY (jeśli potrzebna): tak
+- Komentarz: Moduł 6.5 Throat / Constriction Analysis uderzył w ten sam limit rozdzielczości wokseli (30 vox/cell). Na tak grubej siatce ekstrakcja osi medialnej i szukanie minimów lokalnych dla gładkich powierzchni TPMS zawsze zawiedzie (pikseloza zabija gładkie gradienty).
+
+Bardzo podoba mi się Twój fallback (For gyroid TPMS, throats are typically ~0.7× mean channel width). Ponieważ pracujemy z idealnymi strukturami matematycznymi, a nie z losowym złożem kulkowym, ten teoretyczny szacunek jest w 100% poprawny i wystarczający do naszych celów analitycznych!
+
+Jak to optymalizujemy:
+Zrezygnujmy całkowicie z ciężkiego algorytmu Medial Axis dla TPMS. Zamiast tego, oprzyjmy ten moduł na wynikach, które uzyskaliśmy wcześniej (z gładkiego Ray Castingu dla Channel Width).
+
+Zamiast szukać osi medialnej, po prostu policz to analitycznie z gładkiego rozkładu kanałów:
+
+Mean throat = Mean Channel Width (z Ray Castingu) * 0.70
+
+P10 throat = P10 Channel Width * 0.70 (to będzie nasza granica zatykania kolumny!)
+
+Wygeneruj na tej podstawie sztuczny, wyliczony rozkład, albo po prostu wyświetl te wyliczone wartości jako szacunki (Approximation).
+
+Alerty UX: Zostaw sprawdzanie zatykania. Jeśli wyliczone P10 throat spadnie poniżej określonej wielkości (np. < 20 µm dla pełnej krwi, lub < 5 µm dla standardowego HPLC), niech UI wyrzuci ostrzeżenie na czerwono: "⚠ High Clogging Risk for particulate samples".
+
+To całkowicie uwolni RAM, da nam natychmiastowy wynik i będzie chemicznie użyteczne do oceny, czy kolumna się nie zatka!
+
+### 6.6 Printability Score
+- METODA: Scoring 0-100 na podstawie:
+  - Min wall < 1 pixel (22µm): -40 pkt
+  - Min wall < 2 pixels (44µm): -20 pkt
+  - Min channel < 2 pixels: -30 pkt
+  - Min channel < 3 pixels: -15 pkt
+  - >10% trapped resin (isolated void): -20 pkt
+  - >2% trapped resin: -10 pkt
+  - >10% thin walls: -15 pkt
+  Rating: EXCELLENT (85+), GOOD (70+), MARGINAL (50+), POOR (30+), FAIL (<30).
+  Printer pixel = 22 µm (konfigurowalny w GUI).
+- STATUS:
+- Score:
+- Rating:
+- Min wall [µm]:
+- Min channel [µm]:
+- Trapped resin [%]:
+- Issues:
+- Czy score ma sens:
+- ZMIANA METODY (jeśli potrzebna — np. inne progi, inne wagi):
+- Komentarz: Dotarliśmy do mety! Moduł 6.6 Printability Score ma świetnie napisaną logikę punktacji (kary za piksele i trapped resin są bardzo realistyczne dla druku DLP).
+
+Niestety, moduł stał się ofiarą zjawiska GIGO. Pobrał fałszywe dane z 6.1 i 6.2 (gdzie woksel miał 13 µm). Ponieważ 13 < 22 µm, moduł z automatu oblał projekt (Score 5/100). Kiedy naprawimy 6.1 i 6.2 za pomocą Ray Castingu, ten problem w dużej mierze zniknie sam, ale musimy wprowadzić tu jedną kluczową poprawkę uodparniającą (Robustness):
+
+Nie używajmy absolutnego minimum (Min) z Ray Castingu do oceny drukowalności.
+W metodach opartych na siatce trójkątów i rzucaniu promieni zawsze zdarzy się jeden promień, który uderzy w jakiś dziwny, ostry kąt na krawędzi cylindra i zwróci wartość np. 0.5 µm. Jeśli oprzemy na tym scoring, każda struktura obleje test.
+
+Zmiana:
+
+Zamiast Minimum wall, do oceny w scoringu użyj 1. percentyla (P1) lub 5. percentyla (P5) z rozkładu grubości ściany (Wall Thickness).
+
+Zamiast Minimum channel, użyj P1 lub P5 z rozkładu kanałów (Channel Width).
+
+Jeśli 99% (P1) struktury jest grubsze niż 1 piksel drukarki, to znaczy, że fizycznie model da się wydrukować bez problemu, a ewentualne mikroskopijne błędy na brzegach mesha zostaną po prostu zalane żywicą.
+
+Poza tym – świetna analityczna robota z wagami w tym module!
+
+### 6.7 Export CSV (Distributions)
+- STATUS:
+- Komentarz:
+
+---
+
+## 7. ZAKŁADKA: CROSS-SECTION
+
+### 7.1 Wybór płaszczyzny (XY/XZ/YZ)
+- METODA: Voxelizacja mesha → ekstrakcja 2D slice na wybranej pozycji z voxel grid. Solid=czarny, void=biały.
+- STATUS:
+- Komentarz:
+
+### 7.2 Slider pozycji
+- STATUS:
+- Czy obraz się aktualizuje w realtime:
+- Komentarz:
+
+### 7.3 Podgląd przekroju
+- STATUS:
+- Czy kształt wygląda jak gyroid:
+- Komentarz:
+
+### 7.4 Lokalna porowatość
+- METODA: solid_pixels / total_pixels na danym slice
+- STATUS:
+- Wartość [%]:
+- Czy bliska globalnej porowatości:
+- ZMIANA METODY (jeśli potrzebna):
+- Komentarz:
+
+### 7.5 Export PNG / SVG
+- STATUS PNG:
+- STATUS SVG:
+- Komentarz:
+Zakładka 7. CROSS-SECTION działa, ale padła ofiarą niskiej rozdzielczości wokselizacji (schodkowe krawędzie). Musimy całkowicie ominąć woksele dla modułu przekrojów i zastosować matematyczne cięcie siatki (Mesh Slicing).
+
+Dzięki temu uzyskamy idealnie gładkie krawędzie, wektorowy eksport do SVG i perfekcyjnie dokładną porowatość lokalną.
+
+Oto jak to zmienić w trimesh w 2 linijkach kodu:
+Zamiast ciąć macierz wokseli, użyjmy wbudowanej funkcji mesh.section(), która przecina trójkąty siatki płaszczyzną i zwraca obiekt 2D (wektorowe ścieżki).
+
+Python
+# Przykład dla cięcia w osi Z (płaszczyzna XY) na wysokości z_level
+plane_origin = [0, 0, z_level]
+plane_normal = [0, 0, 1]
+
+# Zwraca obiekt trimesh.path.Path3D (gładkie wektory obrysu!)
+slice_path = mesh.section(plane_origin=plane_origin, plane_normal=plane_normal)
+
+# Obliczenie idealnie dokładnej powierzchni przekroju polimeru:
+if slice_path is not None:
+    slice_2d, to_3d = slice_path.to_planar()
+    solid_area = slice_2d.area
+
+    # Lokalna porowatość to (Area_kontenera - solid_area) / Area_kontenera
+Dlaczego to jest lepsze:
+
+Podgląd: Możesz wyrenderować te ścieżki 2D (np. w matplotlib) z idealnie gładkimi krawędziami.
+
+Eksport SVG: Obiekt Path2D ma wbudowaną funkcję export('plik.svg'). Wygeneruje on prawdziwe, gładkie krzywe Beziera/poligony, idealne do publikacji naukowych, zamiast zrzutu pikseli.
+
+Szybkość: Suwak (Slider) będzie działał w czasie rzeczywistym, bo liczenie przecięcia płaszczyzny z meshem jest często szybsze niż indeksowanie gigantycznych macierzy 3D.
+
+Jak wypełnić Twój formularz z tą nową wiedzą:
+### 7.1 Wybór płaszczyzny (XY/XZ/YZ)
+
+ZMIANA METODY: Odejście od ekstrakcji "2D slice na wybranej pozycji z voxel grid" na rzecz analitycznego przecięcia siatki trójkątów płaszczyzną (trimesh.section).
+
+Komentarz: Woksele wprowadzają błąd dyskretyzacji widoczny na brzegach.
+
+### 7.3 Podgląd przekroju
+
+Czy kształt wygląda jak gyroid: Z wektorami tak (gładkie, charakterystyczne pętle TPMS). Z wokselami wygląda jak 8-bitowa gra.
+
+### 7.4 Lokalna porowatość
+
+METODA: Zamiast solid_pixels / total_pixels, zmiana na wektorowe pole powierzchni slice_2d.area / container_area. Da to ułamkową, perfekcyjną precyzję.
+
+### 7.5 Export PNG / SVG
+
+STATUS SVG: Wektorowe ścieżki (Paths) z mesha pozwolą na prawdziwy wektorowy eksport, co jest niemożliwe z "czarno-białych pikseli" z wokselizacji.
+---
+
+## 8. ZAKŁADKA: COMPARE
+
+### 8.1 "Save to Compare"
+- STATUS:
+- Czy projekt pojawia się w tabeli:
+- Komentarz:
+
+### 8.2 Porównanie wielu projektów
+- STATUS:
+- Ile projektów:
+- Czy tabela poprawna:
+- Komentarz:
+
+### 8.3 Clear All
+- STATUS:
+- Komentarz:
+
+### 8.4 Export CSV (Compare)
+- STATUS:
+- Komentarz:
+
+---
+
+## 9. OGÓLNE
+
+### 9.1 Stabilność
+- Czy aplikacja się crashowała:
+- Ile razy:
+- Przy jakiej operacji:
+
+### 9.2 Wydajność
+- Czy coś było za wolne:
+- Co i ile trwało:
+
+### 9.3 Użyteczność GUI
+- Co jest niewygodne:
+- Co brakuje:
+- Co byś zmienił:
+
+### 9.4 Priorytety do v3.1
+- Co MUSI być naprawione (blokuje pracę):
+- Co POWINNO być naprawione (irytujące):
+- Co FAJNIE BYŁOBY mieć (nice-to-have):
+
+### 9.5 Zmiany metod obliczeniowych
+- Które metody są ZŁE (błędny wynik):
+- Które metody są NIEPRECYZYJNE (przybliżenie OK ale chcę lepsze):
+- Które metody chcę ZMIENIĆ na inne (opisz jakie):
+- Jakie NOWE metryki chcę dodać:
+
+---
+
+## KONIEC FORMULARZA
+## Po wypełnieniu wklej do czatu → przejdziemy do v3.1
