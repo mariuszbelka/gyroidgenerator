@@ -304,7 +304,11 @@ class PredictionsTab(QWidget):
             self.dp_text.setText("⚠ Cannot determine column dimensions")
             return
 
+        # Normalize porosity (ensure fraction 0-1)
         porosity = stats.get('porosity', 0.5)
+        if porosity > 1.0:
+            porosity /= 100.0
+
         total_sa = stats.get('surface_area', 1.0)
         external_sa = stats.get('external_area_mm2', 0)
         if external_sa == 0:
@@ -334,6 +338,8 @@ class PredictionsTab(QWidget):
 
         d_h_mm = calc_hydraulic_diameter(porosity, total_vol, internal_sa)
         d_h_m = d_h_mm / 1000.0
+
+        logger.info(f"ΔP calculation input: porosity={porosity:.4f}, d_h={d_h_mm*1000:.2f}um, internal_sa={internal_sa:.2f}mm2, vol={total_vol:.2f}mm3")
 
         viscosity = self._get_viscosity()
         flow = self.flow_spin.value()
@@ -396,6 +402,8 @@ class PredictionsTab(QWidget):
         wall_m = gp.wall_thickness / 1000.0
         channel_m = (gp.unit_cell - gp.wall_thickness) / 1000.0
         porosity = self._basic_stats.get('porosity', 0.5)
+        if porosity > 1.0:
+            porosity /= 100.0
 
         result = calc_van_deemter(
             unit_cell_m=unit_cell_m,
@@ -496,10 +504,10 @@ class PredictionsTab(QWidget):
         self.des_figure.clear()
         ax = self.des_figure.add_subplot(111)
 
-        labels = ['Wall\n(90%)', 'Channel\ntransport', 'Total\n(90%)', 'Total\n(99%)']
+        labels = ['Wall\n(90%)', 'Sweep\ntransport', 'Total\n(90%)', 'Total\n(99%)']
         times = [
             result['t_wall_90_s'],
-            result['t_channel_s'],
+            result['t_sweep_s'],
             result['t_total_90_s'],
             result['t_total_99_s'],
         ]
@@ -520,12 +528,16 @@ class PredictionsTab(QWidget):
         max_t = max(times)
         if max_t < 1:
             ax.set_ylabel('Time [ms]')
-            ax.set_yticklabels([f'{t*1000:.0f}' for t in ax.get_yticks()])
+            ticks = ax.get_yticks()
+            ax.set_yticks(ticks)
+            ax.set_yticklabels([f'{t*1000:.0f}' for t in ticks])
         elif max_t < 60:
             ax.set_ylabel('Time [s]')
         elif max_t < 3600:
             ax.set_ylabel('Time [min]')
-            ax.set_yticklabels([f'{t/60:.1f}' for t in ax.get_yticks()])
+            ticks = ax.get_yticks()
+            ax.set_yticks(ticks)
+            ax.set_yticklabels([f'{t/60:.1f}' for t in ticks])
 
         ax.grid(True, alpha=0.3, axis='y')
         self.des_figure.tight_layout()
@@ -540,8 +552,8 @@ class PredictionsTab(QWidget):
     t_95%  = {_format_time_short(result['t_wall_95_s'])}
     t_99%  = {_format_time_short(result['t_wall_99_s'])}
 
-  Channel transport:
-    t_channel = {_format_time_short(result['t_channel_s'])}
+  Sweep transport:
+    t_sweep = {_format_time_short(result['t_sweep_s'])}
 
   Total (wall + channel):
     t_90%  = {result['t_total_90_formatted']}
@@ -566,6 +578,9 @@ class PredictionsTab(QWidget):
         internal_sa = total_sa - external_sa
 
         porosity = stats.get('porosity', 0.5)
+        if porosity > 1.0:
+            porosity /= 100.0
+
         solid_vol = stats.get('volume', 0)
 
         # Container volume
@@ -644,7 +659,7 @@ class PredictionsTab(QWidget):
                 if 'desorption' in self._results:
                     r = self._results['desorption']
                     f.write(f"t_wall_90,{r['t_wall_90_s']:.4f},s\n")
-                    f.write(f"t_channel,{r['t_channel_s']:.4f},s\n")
+                    f.write(f"t_sweep,{r['t_sweep_s']:.4f},s\n")
                     f.write(f"t_total_90,{r['t_total_90_s']:.4f},s\n")
                     f.write(f"t_total_99,{r['t_total_99_s']:.4f},s\n")
 

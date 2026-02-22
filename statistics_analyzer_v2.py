@@ -298,14 +298,15 @@ class StatisticsCalculator:
         
         # Convert to numpy boolean array (True = solid, False = void)
         self._voxel_grid = voxel_grid.matrix
+        self._voxel_origin = voxel_grid.translation
+        self._voxel_pitch = voxel_grid.pitch
         self._voxel_resolution = voxels_per_unit_cell
-        self._voxel_pitch = max_dim / n_voxels
         
         # Separate phases
         self._solid_voxels = self._voxel_grid
         self._void_voxels = ~self._voxel_grid
         
-        print(f"INFO: Voxel grid created: {self._voxel_grid.shape}, pitch={self._voxel_pitch:.4f}mm")
+        print(f"INFO: Voxel grid created: {self._voxel_grid.shape}, pitch={self._voxel_pitch} mm")
     
     
     def calculate_desorption_path_fast(self, tau: float = 1.41) -> Dict:
@@ -332,17 +333,24 @@ class StatisticsCalculator:
             return {'error': 'No solid voxels found'}
         
         # Convert voxel coords to physical coords (mm)
-        voxel_pitch = self._voxel_pitch
-        solid_coords_mm = solid_coords * voxel_pitch
+        # origin + indices * pitch
+        solid_coords_mm = self._voxel_origin + solid_coords * self._voxel_pitch
+
+        # Container parameters (using absolute coordinates from container_params)
+        # Note: We assume the container is centered at the mesh center or as defined
+        # In this platform, shapes are usually centered at (0,0,cz) or (0,0,0)
+        # We should use the same logic as in mesh_generator.py
+
+        # For sphere, we assume it's centered at (0,0,0) as per SphereGeometry default
+        # For cylinder, centered at (0,0, height/2)
         
-        # Calculate container center
         if self.container_geometry == 'cylinder':
-            center_x = self.container_params['diameter'] / 2
-            center_y = self.container_params['diameter'] / 2
-            center_z = self.container_params['height'] / 2
+            center_x, center_y = 0.0, 0.0
+            height = self.container_params['height']
+            center_z = height / 2.0
             radius = self.container_params['diameter'] / 2
         elif self.container_geometry == 'sphere':
-            center_x = center_y = center_z = self.container_params['diameter'] / 2
+            center_x, center_y, center_z = 0.0, 0.0, 0.0
             radius = self.container_params['diameter'] / 2
         
         # Calculate Euclidean distance to edge for each solid voxel
@@ -439,17 +447,16 @@ class StatisticsCalculator:
             n_samples = len(solid_coords)
         
         # Convert to physical coords
-        voxel_pitch = self._voxel_pitch
-        sampled_coords_mm = sampled_coords * voxel_pitch
+        sampled_coords_mm = self._voxel_origin + sampled_coords * self._voxel_pitch
         
-        # Calculate container parameters
+        # Calculate container parameters (centered at origin)
         if self.container_geometry == 'cylinder':
-            center_x = self.container_params['diameter'] / 2
-            center_y = self.container_params['diameter'] / 2
-            center_z = self.container_params['height'] / 2
+            center_x, center_y = 0.0, 0.0
+            height = self.container_params['height']
+            center_z = height / 2.0
             radius = self.container_params['diameter'] / 2
         elif self.container_geometry == 'sphere':
-            center_x = center_y = center_z = self.container_params['diameter'] / 2
+            center_x, center_y, center_z = 0.0, 0.0, 0.0
             radius = self.container_params['diameter'] / 2
         
         # For each sampled point, calculate path to edge

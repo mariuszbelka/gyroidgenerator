@@ -72,10 +72,7 @@ class VoxelAnalyzer:
 
     def _voxelize(self, voxels_per_unit_cell: int = 12):
         """
-        Voxelize mesh with given resolution.
-
-        Args:
-            voxels_per_unit_cell: Voxels per unit cell (higher = better, slower)
+        Voxelize mesh with given resolution and apply container mask.
         """
         if self._voxel_grid is not None:
             return
@@ -85,9 +82,51 @@ class VoxelAnalyzer:
                     f"resolution={voxels_per_unit_cell} vox/unit_cell")
 
         t0 = time.time()
-        voxel = self.mesh.voxelized(pitch=pitch)
-        self._voxel_grid = voxel.matrix  # True = solid
-        self._pitch = pitch
+        # Voxelize using trimesh
+        voxels = self.mesh.voxelized(pitch=pitch)
+
+        # Fill to ensure we have solid volume, not just shell
+        # fill() works best for watertight meshes
+        voxels.fill()
+
+        self._voxel_grid = voxels.matrix  # True = solid
+        self._pitch = voxels.pitch
+        self._origin = voxels.translation
+
+        # Apply container mask to avoid counting void outside the sphere/cylinder
+        logger.info("Applying container mask to voxel grid...")
+        nx, ny, nz = self._voxel_grid.shape
+        # Handle pitch being either a scalar or a (3,) array
+        if hasattr(self._pitch, '__len__'):
+            px, py, pz = self._pitch
+        else:
+            px = py = pz = self._pitch
+
+        x = self._origin[0] + np.arange(nx) * px
+        y = self._origin[1] + np.arange(ny) * py
+        z = self._origin[2] + np.arange(nz) * pz
+        X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+
+        if self.container_geometry == 'cylinder':
+            r = self.container_params['diameter'] / 2
+            h = self.container_params['height']
+            # Center is at (0, 0, h/2) as per mesh_generator.py
+            mask = (X**2 + Y**2 <= r**2) & (Z >= 0) & (Z <= h)
+        elif self.container_geometry == 'sphere':
+            r = self.container_params['diameter'] / 2
+            # Center is at (0, 0, 0)
+            mask = (X**2 + Y**2 + Z**2 <= r**2)
+        else:
+            mask = np.ones_like(self._voxel_grid, dtype=bool)
+
+        self._container_mask = mask
+
+        # Any 'void' (False) outside the mask should NOT be treated as void space
+        # We can set voxels outside the mask to True (solid) to exclude them from void analysis
+        # OR better: have a separate mask for analysis.
+        # For now, let's force voxels outside the mask to be 'solid' so they don't count as void
+        # and won't be reachable during connectivity analysis if they are outside.
+        # But wait, we want to ignore them completely.
 
         logger.info(f"Voxel grid: {self._voxel_grid.shape}, "
                     f"time={time.time()-t0:.1f}s")
@@ -134,7 +173,12 @@ class VoxelAnalyzer:
 
         # Filtr max 3x3x3 — local maxima to gdzie edt == local_max
         local_max = maximum_filter(edt, size=3)
-        is_local_max = (edt == local_max) & solid_mask & (edt > 0)
+
+        # Filter: only internal structures, ignore container boundaries
+        # We erode the container mask to exclude maxima too close to the edge
+        internal_mask = binary_erosion(self._container_mask, iterations=2)
+
+        is_local_max = (edt == local_max) & solid_mask & (edt > 0) & internal_mask
 
         # Wall thickness = 2 × inscribed sphere radius
         wall_values = edt[is_local_max] * 2.0  # mm
@@ -191,7 +235,11 @@ class VoxelAnalyzer:
 
         # Local maxima
         local_max = maximum_filter(edt, size=3)
-        is_local_max = (edt == local_max) & void_mask & (edt > 0)
+
+        # Filter: only internal structures
+        internal_mask = binary_erosion(self._container_mask, iterations=2)
+
+        is_local_max = (edt == local_max) & void_mask & (edt > 0) & internal_mask
 
         channel_values = edt[is_local_max] * 2.0  # mm
         channel_values_um = channel_values * 1000  # µm
@@ -229,20 +277,12 @@ class VoxelAnalyzer:
     def calc_connectivity(self, voxels_per_uc: int = 12) -> Dict:
         """
         Analiza connectivity kanałów (void space).
-
-        Metoda:
-        1. Label connected components w void space
-        2. Sprawdź które komponenty łączą inlet z outlet
-           (Z_min → Z_max dla cylindra)
-        3. Dead-end = void niepołączony z through-path
-
-        Returns:
-            Dict z connected porosity, dead-end fraction, etc.
         """
         t0 = time.time()
         self._voxelize(voxels_per_uc)
 
-        void_mask = ~self._voxel_grid
+        # IMPORTANT: Only consider void space INSIDE the container
+        void_mask = (~self._voxel_grid) & self._container_mask
 
         # Label connected components (26-connectivity for 3D)
         struct = generate_binary_structure(3, 3)  # 26-connectivity
@@ -254,11 +294,14 @@ class VoxelAnalyzer:
             return {'error': 'No void voxels found'}
 
         # Znajdź komponenty łączące inlet z outlet
-        # Inlet = bottom slice (z=0), Outlet = top slice (z=max)
+        # For a masked volume, we need to find voxels that are at the boundaries of the MASK
+        # or just use Z_min/Z_max planes if they are flat (cylinder).
+        # For a sphere, it might be more complex, but we'll stick to Z-axis connectivity for now.
         nz = self._voxel_grid.shape[2]
 
-        inlet_labels = set(np.unique(labeled[:, :, 0])) - {0}
-        outlet_labels = set(np.unique(labeled[:, :, nz-1])) - {0}
+        # Inlet/Outlet labels - only those within the container mask!
+        inlet_labels = set(np.unique(labeled[:, :, 0][self._container_mask[:, :, 0]])) - {0}
+        outlet_labels = set(np.unique(labeled[:, :, nz-1][self._container_mask[:, :, nz-1]])) - {0}
 
         # Through-connected = present at both inlet AND outlet
         through_labels = inlet_labels & outlet_labels
@@ -288,8 +331,9 @@ class VoxelAnalyzer:
         isolated_fraction = isolated_voxels / total_void_voxels if total_void_voxels > 0 else 0
 
         # Connected porosity (only through-connected void)
-        total_voxels = self._voxel_grid.size
-        connected_porosity = through_voxels / total_voxels
+        # Ratio of through-connected void to total CONTAINER volume
+        container_voxels = np.sum(self._container_mask)
+        connected_porosity = through_voxels / container_voxels if container_voxels > 0 else 0
 
         results = {
             'n_components': n_components,
@@ -377,20 +421,22 @@ class VoxelAnalyzer:
             n_erosions = max(1, int(round(probe_voxels)))
 
             # Erode void space
-            void_mask = ~self._voxel_grid
+            void_mask = (~self._voxel_grid) & self._container_mask
             eroded_void = void_mask.copy()
             for _ in range(n_erosions):
                 eroded_void = binary_erosion(eroded_void)
+                # Keep it within the mask (erosion can pull away from boundaries)
+                eroded_void &= self._container_mask
 
             # Accessible surface = boundary between solid and eroded void
             # Count boundary voxels (solid that touch eroded void)
             dilated_void = binary_dilation(eroded_void)
-            boundary = dilated_void & self._voxel_grid
+            boundary = (dilated_void & self._voxel_grid) & self._container_mask
             n_boundary = np.sum(boundary)
 
             # Original boundary (solid touching original void)
             dilated_orig = binary_dilation(void_mask)
-            boundary_orig = dilated_orig & self._voxel_grid
+            boundary_orig = (dilated_orig & self._voxel_grid) & self._container_mask
             n_boundary_orig = max(1, np.sum(boundary_orig))
 
             # ASA fraction
@@ -553,19 +599,10 @@ class VoxelAnalyzer:
         labeled, n_components = label(void_mask, structure=struct)
         total_void = np.sum(void_mask)
 
-        # Check which components touch the exterior
-        # Exterior = any face of bounding box
-        nz = self._voxel_grid.shape[2]
-        ny = self._voxel_grid.shape[1]
-        nx = self._voxel_grid.shape[0]
-
-        exterior_labels = set()
-        for face in [
-            labeled[0, :, :], labeled[-1, :, :],
-            labeled[:, 0, :], labeled[:, -1, :],
-            labeled[:, :, 0], labeled[:, :, -1]
-        ]:
-            exterior_labels.update(set(np.unique(face)) - {0})
+        # Check which components touch the exterior of the container
+        # A component is NOT trapped if it touches the container boundary
+        is_boundary = self._container_mask & ~binary_erosion(self._container_mask)
+        exterior_labels = set(np.unique(labeled[is_boundary])) - {0}
 
         trapped_voxels = 0
         for comp in range(1, n_components + 1):

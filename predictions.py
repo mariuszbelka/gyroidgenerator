@@ -444,18 +444,19 @@ def calc_desorption_time(
     for pct, a in alpha.items():
         t_wall[pct] = L_half**2 * a / D_polymer
 
-    # Transport kanałami
+    # Transport kanałami (Convective Sweep / Diffusion)
+    # We rename this to t_sweep_s to reflect the Convective Sweep model terminology
     D_eff_channel = D_mobile / tortuosity**2
-    t_channel = mean_desorption_path_m**2 / (2 * D_eff_channel)
+    t_sweep = mean_desorption_path_m**2 / (2 * D_eff_channel)
 
     # Total (suma — bo procesy są sekwencyjne)
     t_total = {}
     for pct in alpha:
-        t_total[pct] = t_wall[pct] + t_channel
+        t_total[pct] = t_wall[pct] + t_sweep
 
     # Rate-limiting step
     t_wall_90 = t_wall['90%']
-    ratio = t_wall_90 / t_channel if t_channel > 0 else float('inf')
+    ratio = t_wall_90 / t_sweep if t_sweep > 0 else float('inf')
 
     if ratio > 10:
         rate_limiting = 'Wall diffusion (strongly dominant)'
@@ -473,7 +474,7 @@ def calc_desorption_time(
         't_wall_90_s': t_wall['90%'],
         't_wall_95_s': t_wall['95%'],
         't_wall_99_s': t_wall['99%'],
-        't_channel_s': t_channel,
+        't_sweep_s': t_sweep,
         't_total_90_s': t_total['90%'],
         't_total_95_s': t_total['95%'],
         't_total_99_s': t_total['99%'],
