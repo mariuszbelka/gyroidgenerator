@@ -303,7 +303,8 @@ class StatisticsTabV2(QWidget):
         if basic['porosity'] is not None:
             text += f"Gyroid Solid:  {_f(basic['gyroid_volume'])} mm³\n"
             text += f"Void Space:    {_f(basic['void_volume'])} mm³\n"
-            text += f"Porosity:      {_f(basic['porosity'], '{:.1f}')}%\n"
+            # Multiply by 100 for display (backend uses fraction)
+            text += f"Porosity:      {_f(basic['porosity'] * 100, '{:.1f}')}%\n"
         else:
             text += "Porosity:      N/A (not watertight)\n"
 

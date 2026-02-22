@@ -69,7 +69,8 @@ class StatisticsCalculator:
         if self.mesh.is_watertight:
             results['gyroid_volume'] = self.mesh.volume  # mm³
             results['void_volume'] = total_volume - results['gyroid_volume'] if total_volume else None
-            results['porosity'] = (results['void_volume'] / total_volume) * 100 if total_volume and results['void_volume'] is not None else None
+            # Return as fraction (0-1) for backend standardization
+            results['porosity'] = (results['void_volume'] / total_volume) if total_volume and results['void_volume'] is not None else None
         else:
             results['gyroid_volume'] = None
             results['void_volume'] = None
@@ -257,43 +258,77 @@ class StatisticsCalculator:
 
     # ==================== VOXEL-BASED ANALYSIS ====================
 
+    def _get_container_mask(self, x, y, z) -> np.ndarray:
+        """Create a boolean mask for voxels inside the container."""
+        # Use mesh bounds and center for alignment
+        bounds = self.mesh.bounds
+        center = (bounds[0] + bounds[1]) / 2.0
+
+        if self.container_geometry == 'sphere':
+            r = self.container_params['diameter'] / 2.0
+            dist = np.sqrt((x - center[0])**2 + (y - center[1])**2 + (z - center[2])**2)
+            return dist <= r
+
+        elif self.container_geometry == 'cylinder':
+            r = self.container_params['diameter'] / 2.0
+            h = self.container_params['height']
+            dist_r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+            dist_z = np.abs(z - center[2])
+            return (dist_r <= r) & (dist_z <= h/2.0)
+
+        elif self.container_geometry in ('cube', 'box'):
+            # Already matches bbox mostly, but be explicit
+            return (x >= bounds[0, 0]) & (x <= bounds[1, 0]) & \
+                   (y >= bounds[0, 1]) & (y <= bounds[1, 1]) & \
+                   (z >= bounds[0, 2]) & (z <= bounds[1, 2])
+
+        return np.ones_like(x, dtype=bool)
+
     def _voxelize_mesh(self, voxels_per_unit_cell: int = 10):
         """
-        Convert mesh to voxel grid (expensive - cached).
-
-        Args:
-            voxels_per_unit_cell: Resolution (higher = more accurate, slower)
+        Convert mesh to voxel grid with container masking.
         """
         if self._voxel_grid is not None and self._voxel_resolution == voxels_per_unit_cell:
-            return  # Already computed
+            return
 
         print(f"INFO: Voxelizing mesh (resolution: {voxels_per_unit_cell} voxels/unit)...")
 
-        # Determine voxel size based on container dimensions
-        if self.container_geometry == 'cylinder':
-            max_dim = max(self.container_params['diameter'],
-                         self.container_params['height'])
-        elif self.container_geometry == 'sphere':
-            max_dim = self.container_params['diameter']
-        else:
-            max_dim = self.mesh.bounds[1].max() - self.mesh.bounds[0].min()
+        # Use trimesh to create the initial voxelization
+        # We need a small pitch for accuracy
+        pitch = 0.2 / voxels_per_unit_cell # Default estimate
+        voxel_grid_obj = self.mesh.voxelized(pitch=pitch)
 
-        # Estimate unit cell from dimensions (rough)
-        estimated_unit_cells = max_dim / 0.2  # Assume ~0.2mm unit cell
-        n_voxels = int(estimated_unit_cells * voxels_per_unit_cell)
-        n_voxels = max(50, min(n_voxels, 500))  # Clamp to reasonable range
+        # Fill the interior if mesh is watertight (or try anyway)
+        try:
+            voxel_grid_obj = voxel_grid_obj.fill()
+        except:
+            print("WARNING: Voxel fill failed, using shell.")
 
-        # Voxelize using trimesh
-        voxel_grid = self.mesh.voxelized(pitch=max_dim/n_voxels)
-
-        # Convert to numpy boolean array (True = solid, False = void)
-        self._voxel_grid = voxel_grid.matrix
+        self._voxel_grid = voxel_grid_obj.matrix
+        pitch_vec = np.atleast_1d(voxel_grid_obj.pitch)
+        self._voxel_pitch = float(pitch_vec[0])
         self._voxel_resolution = voxels_per_unit_cell
-        self._voxel_pitch = max_dim / n_voxels
 
-        # Separate phases
-        self._solid_voxels = self._voxel_grid
-        self._void_voxels = ~self._voxel_grid
+        # Create coordinate grid for masking (using open grid for memory efficiency)
+        nx, ny, nz = self._voxel_grid.shape
+        origin = voxel_grid_obj.translation
+
+        xi, yi, zi = np.ogrid[:nx, :ny, :nz]
+        X = xi * self._voxel_pitch + float(origin[0])
+        Y = yi * self._voxel_pitch + float(origin[1])
+        Z = zi * self._voxel_pitch + float(origin[2])
+
+        # Apply container mask to ignore voxels outside the sphere/cylinder
+        container_mask = self._get_container_mask(X, Y, Z)
+
+        # solid = voxels both inside mesh and inside container
+        self._solid_voxels = self._voxel_grid & container_mask
+
+        # void = voxels NOT in solid BUT INSIDE container
+        self._void_voxels = (~self._voxel_grid) & container_mask
+
+        # Update main grid to only show container interior
+        self._voxel_grid = self._solid_voxels
 
         print(f"INFO: Voxel grid created: {self._voxel_grid.shape}, pitch={self._voxel_pitch:.4f}mm")
 
@@ -755,7 +790,7 @@ class StatisticsV2:
         summary['Faces'] = bp['faces']
         summary['Watertight'] = bp['watertight']
         if bp.get('porosity') is not None:
-            summary['Porosity [%]'] = f"{bp['porosity']:.1f}"
+            summary['Porosity [%]'] = f"{bp['porosity'] * 100:.1f}"
             summary['Total Volume [mm³]'] = f"{bp['total_volume']:.2f}"
             summary['Gyroid Volume [mm³]'] = f"{bp['gyroid_volume']:.2f}"
         summary['Surface Area [mm²]'] = f"{bp['surface_area']:.2f}"

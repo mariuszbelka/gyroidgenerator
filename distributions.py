@@ -71,12 +71,26 @@ class VoxelAnalyzer:
         self._solid_edt = None  # Distance transform of solid phase
         self._void_edt = None   # Distance transform of void phase
 
+    def _get_container_mask(self, x, y, z) -> np.ndarray:
+        """Create boolean mask for voxels inside container."""
+        bounds = self.mesh.bounds
+        center = (bounds[0] + bounds[1]) / 2.0
+
+        if self.container_geometry == 'sphere':
+            r = self.container_params['diameter'] / 2.0
+            dist = np.sqrt((x - center[0])**2 + (y - center[1])**2 + (z - center[2])**2)
+            return dist <= r
+        elif self.container_geometry == 'cylinder':
+            r = self.container_params['diameter'] / 2.0
+            h = self.container_params['height']
+            dist_r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+            dist_z = np.abs(z - center[2])
+            return (dist_r <= r) & (dist_z <= h/2.0)
+        return np.ones_like(x, dtype=bool)
+
     def _voxelize(self, voxels_per_unit_cell: int = 12):
         """
-        Voxelize mesh with given resolution.
-
-        Args:
-            voxels_per_unit_cell: Voxels per unit cell (higher = better, slower)
+        Voxelize mesh with given resolution and container masking.
         """
         if self._voxel_grid is not None:
             return
@@ -86,9 +100,31 @@ class VoxelAnalyzer:
                     f"resolution={voxels_per_unit_cell} vox/unit_cell")
 
         t0 = time.time()
-        voxel = self._analysis_mesh.voxelized(pitch=pitch)
-        self._voxel_grid = voxel.matrix  # True = solid
-        self._pitch = pitch
+        voxel_obj = self._analysis_mesh.voxelized(pitch=pitch)
+
+        # Robust volume representation
+        try:
+            voxel_obj = voxel_obj.fill()
+        except:
+            pass
+
+        grid = voxel_obj.matrix
+        # trimesh pitch can be a vector
+        pitch_vec = np.atleast_1d(voxel_obj.pitch)
+        self._pitch = float(pitch_vec[0])
+
+        # Masking using open grid for memory efficiency
+        nx, ny, nz = grid.shape
+        origin = voxel_obj.translation
+
+        # Use broadcasting with ogrid
+        xi, yi, zi = np.ogrid[:nx, :ny, :nz]
+        X = xi * self._pitch + float(origin[0])
+        Y = yi * self._pitch + float(origin[1])
+        Z = zi * self._pitch + float(origin[2])
+
+        self._container_mask = self._get_container_mask(X, Y, Z)
+        self._voxel_grid = grid & self._container_mask
 
         logger.info(f"Voxel grid: {self._voxel_grid.shape}, "
                     f"time={time.time()-t0:.1f}s")
@@ -127,28 +163,52 @@ class VoxelAnalyzer:
 
     # ==================== WALL THICKNESS DISTRIBUTION ====================
 
+    def _get_internal_face_indices(self, skin_tolerance: float = 0.02) -> np.ndarray:
+        """
+        Find indices of faces that are NOT on the container's outer boundary.
+        """
+        centroids = self._analysis_mesh.triangles_center
+        bounds = self._analysis_mesh.bounds
+        center = (bounds[0] + bounds[1]) / 2.0
+
+        if self.container_geometry == 'sphere':
+            r_target = self.container_params['diameter'] / 2.0
+            dist = np.linalg.norm(centroids - center, axis=1)
+            # Filter out faces close to the boundary
+            return np.where(dist < r_target * (1.0 - skin_tolerance))[0]
+
+        elif self.container_geometry == 'cylinder':
+            r_target = self.container_params['diameter'] / 2.0
+            h_target = self.container_params['height']
+            dist_r = np.linalg.norm(centroids[:, :2] - center[:2], axis=1)
+            dist_z = np.abs(centroids[:, 2] - center[2])
+
+            is_skin = (dist_r > r_target * (1.0 - skin_tolerance)) | \
+                      (dist_z > (h_target / 2.0) * (1.0 - skin_tolerance))
+            return np.where(~is_skin)[0]
+
+        return np.arange(len(self._analysis_mesh.faces))
+
     def calc_wall_thickness_distribution(self, n_samples: int = 10000,
                                         batch_size: int = 100,
                                         callback=None) -> Dict:
         """
         Rozkład grubości ścian (Mesh-based Ray Casting).
         Mierzy odległość między przeciwległymi ściankami szkieletu.
-
-        Args:
-            n_samples: Total number of rays to cast
-            batch_size: Number of rays per batch to avoid MemoryError
-            callback: Function to report progress, called as callback(percentage)
-
-        Returns:
-            Dict z histogramem, percentylami, statystykami
         """
         t0 = time.time()
 
-        # 1. Sample points on surface
-        points, face_indices = trimesh.sample.sample_surface(self._analysis_mesh, n_samples)
+        # 0. Filter to internal faces only to avoid "skin" artifacts
+        internal_indices = self._get_internal_face_indices()
+        if len(internal_indices) == 0:
+            return {'error': 'No internal faces found for sampling'}
+
+        # 1. Sample points on internal surface only
+        points, face_indices = trimesh.sample.sample_surface(
+            self._analysis_mesh, n_samples, face_indices=internal_indices
+        )
 
         # 2. Get normals and flip them inwards (into the solid material)
-        # Normal vectors point OUT of the solid towards the void.
         normals = self._analysis_mesh.face_normals[face_indices]
         ray_directions = -normals
         ray_origins = points + (ray_directions * 1e-5)
@@ -172,7 +232,11 @@ class VoxelAnalyzer:
 
             if len(locations) > 0:
                 dist = np.linalg.norm(locations - b_origins[index_ray], axis=1)
-                all_distances.append(dist)
+
+                # Filter outliers (length > 3x unit cell)
+                mask = dist < (3.0 * self.unit_cell_mm)
+                if np.any(mask):
+                    all_distances.append(dist[mask])
 
             if callback:
                 callback(int((i + 1) / n_batches * 100))
@@ -225,19 +289,18 @@ class VoxelAnalyzer:
         """
         Rozkład szerokości kanałów (Mesh-based Ray Casting).
         Mierzy odległość między ściankami wewnątrz pustych kanałów.
-
-        Args:
-            n_samples: Total number of rays to cast
-            batch_size: Number of rays per batch to avoid MemoryError
-            callback: Function to report progress, called as callback(percentage)
-
-        Returns:
-            Dict z histogramem, percentylami, statystykami
         """
         t0 = time.time()
 
+        # 0. Filter to internal faces only
+        internal_indices = self._get_internal_face_indices()
+        if len(internal_indices) == 0:
+            return {'error': 'No internal faces found for sampling'}
+
         # 1. Sample points on surface
-        points, face_indices = trimesh.sample.sample_surface(self._analysis_mesh, n_samples)
+        points, face_indices = trimesh.sample.sample_surface(
+            self._analysis_mesh, n_samples, face_indices=internal_indices
+        )
 
         # 2. Get normals pointing into the channels
         ray_directions = self._analysis_mesh.face_normals[face_indices]
@@ -262,7 +325,11 @@ class VoxelAnalyzer:
 
             if len(locations) > 0:
                 dist = np.linalg.norm(locations - b_origins[index_ray], axis=1)
-                all_distances.append(dist)
+
+                # Filter outliers (length > 3x unit cell)
+                mask = dist < (3.0 * self.unit_cell_mm)
+                if np.any(mask):
+                    all_distances.append(dist[mask])
 
             if callback:
                 callback(int((i + 1) / n_batches * 100))
@@ -309,21 +376,13 @@ class VoxelAnalyzer:
 
     def calc_connectivity(self, voxels_per_uc: int = 12) -> Dict:
         """
-        Analiza connectivity kanałów (void space).
-
-        Metoda:
-        1. Label connected components w void space
-        2. Sprawdź które komponenty łączą inlet z outlet
-           (Z_min → Z_max dla cylindra)
-        3. Dead-end = void niepołączony z through-path
-
-        Returns:
-            Dict z connected porosity, dead-end fraction, etc.
+        Analiza connectivity kanałów (void space) wewnątrz kontenera.
         """
         t0 = time.time()
         self._voxelize(voxels_per_uc)
 
-        void_mask = ~self._voxel_grid
+        # void = NOT solid AND INSIDE container
+        void_mask = (~self._voxel_grid) & self._container_mask
 
         # Label connected components (26-connectivity for 3D)
         struct = generate_binary_structure(3, 3)  # 26-connectivity
@@ -369,8 +428,8 @@ class VoxelAnalyzer:
         isolated_fraction = isolated_voxels / total_void_voxels if total_void_voxels > 0 else 0
 
         # Connected porosity (only through-connected void)
-        total_voxels = self._voxel_grid.size
-        connected_porosity = through_voxels / total_voxels
+        total_voxels_in_container = np.sum(self._container_mask)
+        connected_porosity = through_voxels / total_voxels_in_container if total_voxels_in_container > 0 else 0
 
         results = {
             'n_components': n_components,
@@ -448,7 +507,7 @@ class VoxelAnalyzer:
                 continue
 
             # Erode void space
-            void_mask = ~self._voxel_grid
+            void_mask = (~self._voxel_grid) & self._container_mask
             eroded_void = void_mask.copy()
             for _ in range(n_erosions):
                 eroded_void = binary_erosion(eroded_void)
@@ -570,7 +629,7 @@ class VoxelAnalyzer:
         pct_narrow_channels = 25.0 if channel_results.get('p10_um', 0) < (pixel_um * 3) else 0.0
 
         # ---- Trapped resin (isolated void) ----
-        void_mask = ~self._voxel_grid
+        void_mask = (~self._voxel_grid) & self._container_mask
         struct = generate_binary_structure(3, 3)
         labeled, n_components = label(void_mask, structure=struct)
         total_void = np.sum(void_mask)

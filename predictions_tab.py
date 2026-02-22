@@ -333,9 +333,13 @@ class PredictionsTab(QWidget):
 
         porosity = stats.get('porosity')
         if porosity is not None:
-            porosity /= 100.0 # Convert % to fraction
+            # Standardize: ensure fraction (0-1)
+            if porosity > 1.0:
+                porosity /= 100.0
         else:
             porosity = 0.5
+
+        logger.info(f"Predictions: Using porosity = {porosity:.4f} (fraction)")
 
         total_sa = stats.get('surface_area', 1.0)
         external_sa = stats.get('external_area_mm2', 0)
@@ -443,7 +447,8 @@ class PredictionsTab(QWidget):
         stats = self._basic_stats
         porosity = stats.get('porosity')
         if porosity is not None:
-            porosity /= 100.0
+            if porosity > 1.0:
+                porosity /= 100.0
         else:
             porosity = 0.5
         total_sa = stats.get('surface_area', 1.0)
@@ -555,7 +560,8 @@ class PredictionsTab(QWidget):
         # Void volume in mm3 (uL)
         porosity = stats.get('porosity')
         if porosity is not None:
-            porosity /= 100.0
+            if porosity > 1.0:
+                porosity /= 100.0
         else:
             porosity = 0.5
         if self._geometry_params.shape == 'cylinder':
@@ -604,15 +610,16 @@ class PredictionsTab(QWidget):
         ax.set_title(f'Desorption Time Breakdown\n{result["rate_limiting"]}')
 
         # Smart Y-axis label
+        from matplotlib.ticker import FuncFormatter
         max_t = max(times)
         if max_t < 1:
             ax.set_ylabel('Time [ms]')
-            ax.set_yticklabels([f'{t*1000:.0f}' for t in ax.get_yticks()])
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f'{x*1000:.0f}'))
         elif max_t < 60:
             ax.set_ylabel('Time [s]')
         elif max_t < 3600:
             ax.set_ylabel('Time [min]')
-            ax.set_yticklabels([f'{t/60:.1f}' for t in ax.get_yticks()])
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f'{x/60:.1f}'))
 
         ax.grid(True, alpha=0.3, axis='y')
         self.des_figure.tight_layout()
@@ -654,7 +661,8 @@ class PredictionsTab(QWidget):
 
         porosity = stats.get('porosity')
         if porosity is not None:
-            porosity /= 100.0
+            if porosity > 1.0:
+                porosity /= 100.0
         else:
             porosity = 0.5
 
@@ -747,7 +755,7 @@ class PredictionsTab(QWidget):
                 if 'desorption' in self._results:
                     r = self._results['desorption']
                     f.write(f"t_wall_90,{r['t_wall_90_s']:.4f},s\n")
-                    f.write(f"t_channel,{r['t_channel_s']:.4f},s\n")
+                    f.write(f"t_sweep,{r['t_sweep_s']:.4f},s\n")
                     f.write(f"t_total_90,{r['t_total_90_s']:.4f},s\n")
                     f.write(f"t_total_99,{r['t_total_99_s']:.4f},s\n")
 

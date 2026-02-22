@@ -638,7 +638,8 @@ class DistributionsTab(QWidget):
 
                     if name in ('wall_thickness', 'channel_width', 'throat'):
                         f.write(f"{name},mean,{r['mean_um']:.2f},um\n")
-                        f.write(f"{name},std,{r['std_um']:.2f},um\n")
+                        if 'std_um' in r:
+                            f.write(f"{name},std,{r['std_um']:.2f},um\n")
                         f.write(f"{name},min,{r['min_um']:.2f},um\n")
                         f.write(f"{name},max,{r['max_um']:.2f},um\n")
                         f.write(f"{name},p10,{r['p10_um']:.2f},um\n")
