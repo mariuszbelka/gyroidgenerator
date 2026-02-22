@@ -206,15 +206,19 @@ class StatisticsTabV2(QWidget):
         layout.addWidget(warning)
 
         # Desorption Path Analysis
-        desorption_label = QLabel("<b>Desorption Path Analysis (Internal diffusion):</b>")
+        desorption_label = QLabel("<b>Desorption Path Analysis (Internal wall diffusion):</b>")
         layout.addWidget(desorption_label)
 
         self.cb_desorption_fast = QCheckBox("Voxel-based (EDT solid-to-void)")
         self.cb_desorption_fast.setChecked(False)  # Default OFF
+        self.cb_desorption_fast.setToolTip("Measures distance from every solid voxel to the nearest phase interface.\n"
+                                           "Represents the local diffusion length within the polymer wall.")
         fast_info = QLabel("  → ~5-15 seconds, full coverage")
         fast_info.setStyleSheet("color: #666; margin-left: 20px;")
 
         self.cb_desorption_sampling = QCheckBox("Statistical Sampling")
+        self.cb_desorption_sampling.setToolTip("Monte Carlo approach querying direct mesh proximity for random internal points.\n"
+                                               "Physically equivalent to the voxel method but uses the exact triangulation.")
         self.cb_desorption_sampling.setChecked(False)  # Default OFF
 
         # Sampling options

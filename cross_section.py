@@ -1,12 +1,12 @@
 """
-Cross-Section Module — Wizualizacja i eksport przekrojów
+Cross-Section Module — Visualization and Export
 ==========================================================
-Generuje przekroje 2D (XY, XZ, YZ) z mesha gyroidalnego.
+Generates 2D cross-sections (XY, XZ, YZ) from the gyroid mesh.
 
 Output:
-  - Obraz binarny (solid/void)
-  - Lokalna porowatość z przekroju
-  - Eksport PNG/SVG
+  - Vector/Binary image (solid/void)
+  - Local porosity from slice area
+  - PNG/SVG export
 
 Author: Claude (Anthropic)
 Date: 2026-02-20

@@ -860,11 +860,11 @@ class MainWindow(QMainWindow):
         # Add prediction results
         pred_results = getattr(self.predictions_tab, '_results', {})
         if 'dp' in pred_results:
-            stats_dict['delta_P_bar'] = pred_results['dp'].get('delta_P_bar')
+            stats_dict['pressure_drop_bar'] = pred_results['dp'].get('pressure_drop_bar')
         if 'vd' in pred_results:
-            stats_dict['H_min_um'] = pred_results['vd'].get('H_min_um')
-            stats_dict['N_per_m'] = pred_results['vd'].get('N_per_m')
-            stats_dict['u_opt_mm_s'] = pred_results['vd'].get('u_opt_m_s', 0) * 1000
+            stats_dict['minimal_hetp_um'] = pred_results['vd'].get('minimal_hetp_um')
+            stats_dict['theoretical_plates_per_meter'] = pred_results['vd'].get('theoretical_plates_per_meter')
+            stats_dict['optimal_velocity_mm_s'] = pred_results['vd'].get('optimal_velocity_m_s', 0) * 1000
         if 'desorption' in pred_results:
             stats_dict['t_total_90_s'] = pred_results['desorption'].get('t_total_90_s')
         if 'capacity' in pred_results:

@@ -135,10 +135,10 @@ class CompareTab(QWidget):
             ('printability_rating', 'Printability Rating', ''),
 
             # Predictions
-            ('delta_P_bar', 'ΔP', 'bar'),
-            ('H_min_um', 'HETP (H_min)', 'µm'),
-            ('N_per_m', 'Plates/m (N/m)', ''),
-            ('u_opt_mm_s', 'u_opt', 'mm/s'),
+            ('pressure_drop_bar', 'ΔP', 'bar'),
+            ('minimal_hetp_um', 'HETP (H_min)', 'µm'),
+            ('theoretical_plates_per_meter', 'Plates/m (N/m)', ''),
+            ('optimal_velocity_mm_s', 'u_opt', 'mm/s'),
             ('t_total_90_s', 'Desorption t90', 's'),
             ('Q_volumetric_mg_mL', 'Capacity (vol)', 'mg/mL'),
         ]
@@ -201,10 +201,10 @@ class CompareTab(QWidget):
                     'porosity', 'connected_porosity', 'surface_area',
                     'ssa_volumetric', 'connected_fraction',
                     'wall_uniformity', 'throat_to_pore_ratio',
-                    'printability_score', 'N_per_m', 'Q_volumetric_mg_mL'
+                    'printability_score', 'theoretical_plates_per_meter', 'Q_volumetric_mg_mL'
                 )
                 lower_better = key in (
-                    'dead_end_fraction', 'delta_P_bar', 'H_min_um',
+                    'dead_end_fraction', 'pressure_drop_bar', 'minimal_hetp_um',
                     't_total_90_s'
                 )
 

@@ -1,13 +1,13 @@
 """
-Predictions Module — Fizykochemiczne predykcje transportowe
+Predictions Module — Physicochemical Transport Predictions
 =============================================================
-Moduł obliczeniowy dla:
-  - Ciśnienie wsteczne ΔP (Kozeny-Carman)
-  - Van Deemter / HETP
-  - Czas równowagi desorpcji (t90, t99)
-  - Pojemność wiązania
+Computational module for:
+  - Backpressure ΔP (Darcy-based)
+  - Van Deemter / HETP (band broadening)
+  - Desorption equilibrium time (Crank diffusion + Convective Sweep)
+  - Binding capacity
 
-Wzory i stałe z:
+Formulas and constants from:
   - Guiochon, G. "Fundamentals of Preparative and Nonlinear Chromatography" (2006)
   - Knox, J.H. J. Chromatogr. A (1999) 831, 3-15
   - Schure, M.R. et al. J. Chromatogr. A (2004) 1031, 79-86
@@ -112,80 +112,79 @@ def calc_pressure_drop(
     k_geom: float = 32.0
 ) -> Dict:
     """
-    Ciśnienie wsteczne z uogólnionego równania dla monolitów (Darcy-Weisbach / Hagen-Poiseuille).
+    Calculate backpressure using a generalized monolith equation (Darcy-based).
 
-    ΔP = (K_geom × η × u_superficial × L) / (d_h² × ε)
+    ΔP = (K_geom * viscosity * u_superficial * L) / (d_h² * epsilon)
 
-    Gdzie:
-      K_geom: Geometryczna stała oporu (domyślnie 32 dla kapilar,
-              dla gyroidów zazwyczaj 30-50).
-      d_h: Średnica hydrauliczna = 4 × ε / S_volumetric
+    Where:
+      K_geom: Geometry resistance factor (default 32 for capillaries,
+              typically 30-50 for TPMS/Gyroids).
+      d_h: Hydraulic diameter = 4 * epsilon / S_volumetric
 
     Args:
-        porosity: Porowatość [-] (0-1)
-        hydraulic_diameter_m: Średnica hydrauliczna [m]
-        column_length_m: Długość kolumny [m]
-        viscosity_Pa_s: Lepkość fazy ruchomej [Pa·s]
-        flow_rate_uL_min: Przepływ [µL/min]
-        column_diameter_m: Średnica kolumny [m]
-        k_geom: Stała geometryczna (Geometry Resistance Factor)
+        porosity: Porosity (fraction 0-1)
+        hydraulic_diameter_m: Hydraulic diameter [m]
+        column_length_m: Column/Bed length [m]
+        viscosity_Pa_s: Mobile phase viscosity [Pa·s]
+        flow_rate_uL_min: Flow rate [µL/min]
+        column_diameter_m: Column diameter [m]
+        k_geom: Geometry Resistance Factor
 
     Returns:
-        Dict z ΔP w różnych jednostkach + parametry pośrednie
+        Dict with pressure drop in various units and intermediate velocities
     """
     if porosity <= 0 or porosity >= 1:
         return {'error': 'Porosity must be between 0 and 1'}
     if hydraulic_diameter_m <= 0:
         return {'error': 'Hydraulic diameter must be positive'}
 
-    # Konwersja przepływu: µL/min → m³/s
+    # Convert flow rate: µL/min -> m³/s
     flow_rate_m3_s = flow_rate_uL_min * 1e-9 / 60.0
 
-    # Przekrój kolumny [m²]
+    # Column cross-sectional area [m²]
     column_area_m2 = np.pi * (column_diameter_m / 2) ** 2
 
-    # Prędkość powierzchniowa (superficial velocity) [m/s]
-    u_superficial = flow_rate_m3_s / column_area_m2
+    # Superficial velocity (u) [m/s]
+    superficial_velocity_m_s = flow_rate_m3_s / column_area_m2
 
-    # Prędkość liniowa w porach (interstitial) [m/s]
-    u_interstitial = u_superficial / porosity
+    # Interstitial velocity (u_e) [m/s]
+    interstitial_velocity_m_s = superficial_velocity_m_s / porosity
 
-    # Nowy wzór: ΔP = (K_geom × η × u_superficial × L) / (d_h² × ε)
-    delta_P_Pa = (k_geom * viscosity_Pa_s * u_superficial * column_length_m) / \
-                 (hydraulic_diameter_m ** 2 * porosity)
+    # Equation: ΔP = (K_geom * eta * u * L) / (d_h² * porosity)
+    pressure_drop_pascal = (k_geom * viscosity_Pa_s * superficial_velocity_m_s * column_length_m) / \
+                           (hydraulic_diameter_m ** 2 * porosity)
 
-    # Konwersje jednostek
-    delta_P_bar = delta_P_Pa / 1e5
-    delta_P_mbar = delta_P_Pa / 100.0
-    delta_P_MPa = delta_P_Pa / 1e6
-    delta_P_psi = delta_P_Pa / 6894.76
+    # Unit conversions
+    pressure_drop_bar = pressure_drop_pascal / 1e5
+    pressure_drop_mbar = pressure_drop_pascal / 100.0
+    pressure_drop_megapascal = pressure_drop_pascal / 1e6
+    pressure_drop_psi = pressure_drop_pascal / 6894.76
 
     # Permeability (Darcy) [m²]
-    # K = η × u × L / ΔP
-    if delta_P_Pa > 0:
-        permeability_m2 = viscosity_Pa_s * u_superficial * column_length_m / delta_P_Pa
+    if pressure_drop_pascal > 0:
+        permeability_m2 = viscosity_Pa_s * superficial_velocity_m_s * column_length_m / pressure_drop_pascal
     else:
         permeability_m2 = None
 
     results = {
-        'delta_P_Pa': delta_P_Pa,
-        'delta_P_bar': delta_P_bar,
-        'delta_P_mbar': delta_P_mbar,
-        'delta_P_MPa': delta_P_MPa,
-        'delta_P_psi': delta_P_psi,
-        'u_superficial_m_s': u_superficial,
-        'u_interstitial_m_s': u_interstitial,
+        'pressure_drop_pascal': pressure_drop_pascal,
+        'pressure_drop_bar': pressure_drop_bar,
+        'pressure_drop_mbar': pressure_drop_mbar,
+        'pressure_drop_megapascal': pressure_drop_megapascal,
+        'pressure_drop_psi': pressure_drop_psi,
+        'superficial_velocity_m_s': superficial_velocity_m_s,
+        'interstitial_velocity_m_s': interstitial_velocity_m_s,
         'permeability_m2': permeability_m2,
         'k_geom': k_geom,
         'flow_rate_uL_min': flow_rate_uL_min,
         'viscosity_Pa_s': viscosity_Pa_s,
     }
 
-    # Ostrzeżenia (tylko dla wysokich ciśnień)
+    # Warnings for high pressure
     warnings = []
-    if delta_P_bar > 400:
+    if pressure_drop_bar > 400:
         warnings.append('ΔP > 400 bar — exceeds typical HPLC limit!')
-    if delta_P_bar > 1000:
+    if pressure_drop_bar > 1000:
         warnings.append('ΔP > 1000 bar — exceeds UHPLC limit!')
     results['warnings'] = warnings
 
@@ -203,10 +202,10 @@ def calc_pressure_drop_curve(
     n_points: int = 50
 ) -> Dict:
     """
-    Krzywa ΔP vs przepływ.
+    Generate a pressure drop vs flow rate curve.
 
     Returns:
-        Dict z tablicami flow_rates i delta_P_bar
+        Dict with flow_rates and pressure_drop_bar arrays
     """
     flows = np.linspace(flow_range_uL_min[0], flow_range_uL_min[1], n_points)
     pressures = []
@@ -219,11 +218,11 @@ def calc_pressure_drop_curve(
         if 'error' in result:
             pressures.append(0)
         else:
-            pressures.append(result['delta_P_bar'])
+            pressures.append(result['pressure_drop_bar'])
 
     return {
         'flow_rates_uL_min': flows.tolist(),
-        'delta_P_bar': pressures,
+        'pressure_drop_bar': pressures,
     }
 
 
@@ -241,70 +240,69 @@ def calc_van_deemter(
     n_points: int = 100
 ) -> Dict:
     """
-    Krzywa Van Deemter: H = A + B/u + (C_s + C_m) × u
+    Calculate Van Deemter curve: H = A + B/u + (C_s + C_m) * u
 
-    Model dla struktur TPMS:
-      A = 2·λ·d_p     (eddy diffusion)
-      B = 2·γ·D_m/τ²   (longitudinal diffusion)
-      C_s = (2/3)·k/(1+k)² · d_f²/D_s  (stationary phase mass transfer)
-      C_m = ω · d_h²/D_m  (mobile phase mass transfer)
+    Model for TPMS structures:
+      A = 2 * lambda * d_p       (eddy diffusion)
+      B = 2 * gamma * D_m / tau² (longitudinal diffusion)
+      C_s = (2/3) * k/(1+k)² * d_f² / D_s (stationary phase mass transfer)
+      C_m = omega * d_h² / D_m   (mobile phase mass transfer)
 
-    Parametry:
-      - λ ≈ 0.1 (regularna struktura TPMS, bardzo niskie rozmycie wirowe)
-      - γ ≈ 0.6 (obstruction factor)
-      - ω ≈ 0.1 (współczynnik strukturalny dla monolitów)
+    Parameters for ordered TPMS:
+      - lambda ≈ 0.1 (ordered structure, extremely low eddy dispersion)
+      - gamma ≈ 0.6 (obstruction factor)
+      - omega ≈ 0.1 (structural factor for monoliths)
 
     Args:
-        unit_cell_m: Rozmiar komórki [m]
-        wall_thickness_m: Grubość ścianki [m]
-        hydraulic_diameter_m: Średnica hydrauliczna kanałów [m]
-        porosity: Porowatość [-]
-        D_mobile: Współczynnik dyfuzji w fazie ruchomej [m²/s]
-        D_polymer: Współczynnik dyfuzji w polimerze [m²/s]
+        unit_cell_m: Unit cell size [m]
+        wall_thickness_m: Wall thickness [m]
+        hydraulic_diameter_m: Hydraulic diameter of channels [m]
+        porosity: Porosity [fraction]
+        D_mobile: Diffusion coefficient in mobile phase [m²/s]
+        D_polymer: Diffusion coefficient in polymer [m²/s]
         tortuosity: Tortuosity [-]
-        u_range: Zakres prędkości liniowej (m/s). None = auto.
-        n_points: Liczba punktów na krzywej
+        u_range: Linear velocity range [m/s]. None = auto.
+        n_points: Number of points on curve
 
     Returns:
-        Dict z krzywą Van Deemter i parametrami
+        Dict with Van Deemter curve and optimal parameters
     """
-    # Parametry modelu
-    lambda_eddy = 0.1    # Eddy diffusion parameter (regularna struktura TPMS)
+    # Model parameters
+    lambda_eddy = 0.1    # Eddy diffusion parameter (regular TPMS structure)
     gamma_obstr = 0.6    # Obstruction factor for longitudinal diffusion
     omega_mobile = 0.1   # Structural factor for monoliths (mobile phase)
 
-    # Efektywny rozmiar „ziarna" dla gyroidu ≈ unit cell
+    # Effective "particle" size for gyroid ≈ unit cell
     d_p = unit_cell_m
 
-    # Grubość filmu fazy stacjonarnej ≈ połowa grubości ścianki
+    # Stationary phase film thickness ≈ half of wall thickness
     d_f = wall_thickness_m / 2.0
 
-    # Średnica hydrauliczna kanałów
+    # Hydraulic diameter of channels
     d_h = hydraulic_diameter_m
 
-    # Współczynnik retencji (retention factor)
+    # Retention factor (k)
     k_retention = 2.0
 
-    # ---- Termy Van Deemter ----
+    # ---- Van Deemter Terms ----
 
     # A: Eddy diffusion
     A = 2 * lambda_eddy * d_p
 
     # B: Longitudinal (axial) diffusion
-    D_eff_longitudinal = (gamma_obstr / tortuosity**2) * D_mobile
-    B = 2 * D_eff_longitudinal
+    axial_diffusion_coeff = (gamma_obstr / tortuosity**2) * D_mobile
+    B = 2 * axial_diffusion_coeff
 
     # C_s: Mass transfer resistance in stationary phase
     C_s = (2.0/3.0) * (k_retention / (1 + k_retention)**2) * d_f**2 / D_polymer
 
     # C_m: Mass transfer resistance in mobile phase
-    # Uproszczony wzór dla monolitów oparty na d_h
     C_m = omega_mobile * (d_h**2 / D_mobile)
 
     # C total
     C_total = C_s + C_m
 
-    # ---- Automatyczny zakres prędkości ----
+    # ---- Automatic Velocity Range ----
     if u_range is None:
         # u_opt ~ sqrt(B/C)
         if C_total > 0:
@@ -317,11 +315,11 @@ def calc_van_deemter(
     else:
         u_min, u_max = u_range
 
-    # Zapewnij fizycznie sensowny zakres
+    # Ensure physically sensible range
     u_min = max(u_min, 1e-7)
     u_max = min(u_max, 1.0)
 
-    # ---- Oblicz krzywą ----
+    # ---- Calculate Curve ----
     u_values = np.linspace(u_min, u_max, n_points)
 
     H_A = np.full_like(u_values, A)
@@ -332,33 +330,33 @@ def calc_van_deemter(
 
     # ---- Optimum ----
     if C_total > 0:
-        u_opt = np.sqrt(B / C_total)
-        H_min = A + 2 * np.sqrt(B * C_total)
+        optimal_velocity_m_s = np.sqrt(B / C_total)
+        minimal_hetp_m = A + 2 * np.sqrt(B * C_total)
     else:
-        u_opt = u_values[np.argmin(H_total)]
-        H_min = np.min(H_total)
+        optimal_velocity_m_s = u_values[np.argmin(H_total)]
+        minimal_hetp_m = np.min(H_total)
 
-    # Liczba półek teoretycznych na metr
-    if H_min > 0:
-        N_per_m = 1.0 / H_min
+    # Number of theoretical plates per meter
+    if minimal_hetp_m > 0:
+        theoretical_plates_per_meter = 1.0 / minimal_hetp_m
     else:
-        N_per_m = None
+        theoretical_plates_per_meter = None
 
     results = {
-        # Parametry modelu
-        'A_m': A,
-        'B_m2_s': B,
-        'C_s_s': C_s,
-        'C_m_s': C_m,
-        'C_total_s': C_total,
+        # Term parameters
+        'eddy_diffusion_term_m': A,
+        'longitudinal_diffusion_term_m2_s': B,
+        'stationary_phase_mass_transfer_s': C_s,
+        'mobile_phase_mass_transfer_s': C_m,
+        'total_mass_transfer_s': C_total,
 
         # Optimum
-        'u_opt_m_s': u_opt,
-        'H_min_m': H_min,
-        'H_min_um': H_min * 1e6,
-        'N_per_m': N_per_m,
+        'optimal_velocity_m_s': optimal_velocity_m_s,
+        'minimal_hetp_m': minimal_hetp_m,
+        'minimal_hetp_um': minimal_hetp_m * 1e6,
+        'theoretical_plates_per_meter': theoretical_plates_per_meter,
 
-        # Krzywa
+        # Curve data
         'u_values_m_s': u_values.tolist(),
         'H_total_m': H_total.tolist(),
         'H_A_m': H_A.tolist(),
@@ -366,7 +364,7 @@ def calc_van_deemter(
         'H_Cs_m': H_Cs.tolist(),
         'H_Cm_m': H_Cm.tolist(),
 
-        # Parametry wejściowe
+        # Input parameters
         'D_mobile': D_mobile,
         'D_polymer': D_polymer,
         'k_retention': k_retention,
@@ -374,9 +372,9 @@ def calc_van_deemter(
         'gamma_obstruction': gamma_obstr,
         'tortuosity': tortuosity,
 
-        # Dominujący term
+        # Analysis
         'dominant_term': 'C_s (stationary)' if C_s > C_m else 'C_m (mobile)',
-        'C_s_fraction': C_s / C_total if C_total > 0 else 0,
+        'stationary_phase_fraction': C_s / C_total if C_total > 0 else 0,
     }
 
     return results
@@ -391,29 +389,29 @@ def calc_desorption_time(
     flow_rate_uL_min: float
 ) -> Dict:
     """
-    Czas równowagi desorpcji (model SPE).
+    Calculate desorption equilibrium time (SPE model).
 
-    Model dwuetapowy:
-    1) Dyfuzja przez ściankę polimeru (rate-limiting):
-       t_x = (wall/2)² × α_x / D_polymer
-       Gdzie α_x to Fourier number (Fo) dla desorpcji z połowy grubości ścianki.
+    Two-stage model:
+    1) Diffusion through the polymer wall (often rate-limiting):
+       t_x = (wall/2)² * alpha_x / D_polymer
+       Where alpha_x is the Fourier number (Fo) for desorption from a slab of half-thickness.
 
-    2) Wymywanie konwekcyjne kanałów (Convective Sweep):
+    2) Convective sweep of the channels:
        t_sweep = Void_Volume / Flow_Rate
 
     Args:
-        wall_thickness_m: Grubość ścianki [m]
-        D_polymer: Współczynnik dyfuzji w polimerze [m²/s]
-        void_volume_mm3: Objętość kanałów [mm³]
-        flow_rate_uL_min: Przepływ [µL/min]
+        wall_thickness_m: Wall thickness [m]
+        D_polymer: Diffusion coefficient in polymer [m²/s]
+        void_volume_mm3: Void (channel) volume [mm³]
+        flow_rate_uL_min: Flow rate [µL/min]
 
     Returns:
-        Dict z czasami desorpcji
+        Dict with desorption times and rate-limiting analysis
     """
-    # 1. Dyfuzja przez ściankę (Crank, half-thickness model)
+    # 1. Wall diffusion (Crank, half-thickness slab model)
     L_half = wall_thickness_m / 2.0
 
-    # Zaktualizowane współczynniki alfa (Fo) dla połowy grubości (l)
+    # Updated alpha coefficients (Fo) for half-thickness (l)
     alpha = {
         '50%': 0.196,
         '90%': 0.848,
@@ -493,33 +491,33 @@ def calc_binding_capacity(
     probe_accessible_fraction: float = 1.0
 ) -> Dict:
     """
-    Pojemność wiązania analitu.
+    Calculate analyte binding capacity.
 
     Model:
-      Q_vol = ASA × q_surface × accessibility / V_total
-      Q_mass = Q_vol × V_total / mass
+      Q_vol = ASA * q_surface * accessibility / V_total
+      Q_mass = Q_vol * V_total / mass
 
-    Gdzie:
-      ASA = internal_SA × probe_accessible_fraction
-      q_surface = powierzchniowa gęstość wiązania [mg/m²]
-        Typowe wartości:
+    Where:
+      ASA = internal_SA * probe_accessible_fraction
+      q_surface = surface binding density [mg/m²]
+        Typical values:
           MIP (imprinted polymer): 1-5 mg/m²
           C18 silica: 2-4 mg/m²
           Ion exchange: 0.5-2 mg/m²
-      accessibility = frakcja powierzchni realnie dostępna (0.5-1.0)
-      probe_accessible_fraction = z analizy ASA (probe-based)
+      accessibility = fraction of surface physically accessible (0.5-1.0)
+      probe_accessible_fraction = from ASA analysis (probe-based)
 
     Args:
-        internal_surface_area_mm2: Wewnętrzna powierzchnia [mm²]
-        total_volume_mm3: Objętość kontenera [mm³]
-        solid_volume_mm3: Objętość fazy stałej [mm³]
-        polymer_density_g_cm3: Gęstość polimeru [g/cm³]
-        q_surface_mg_m2: Powierzchniowa pojemność [mg/m²]
-        accessibility: Współczynnik dostępności [0-1]
-        probe_accessible_fraction: Z ASA analysis [0-1]
+        internal_surface_area_mm2: Internal surface area [mm²]
+        total_volume_mm3: Container total volume [mm³]
+        solid_volume_mm3: Solid phase volume [mm³]
+        polymer_density_g_cm3: Material density [g/cm³]
+        q_surface_mg_m2: Surface capacity [mg/m²]
+        accessibility: Global accessibility factor [0-1]
+        probe_accessible_fraction: Size-exclusion fraction from ASA [0-1]
 
     Returns:
-        Dict z pojemnościami w różnych jednostkach
+        Dict with capacities in various units
     """
     # Konwersje
     internal_SA_m2 = internal_surface_area_mm2 / 1e6
@@ -568,19 +566,19 @@ def calc_hydraulic_diameter(
     internal_surface_area_mm2: float
 ) -> float:
     """
-    Średnica hydrauliczna kanałów.
+    Calculate hydraulic diameter of the channels.
 
-    d_h = 4 × ε × V_total / S_internal
+    d_h = 4 * epsilon * V_total / S_internal
 
     Ref: Standard hydraulic diameter definition for porous media.
 
     Args:
-        porosity: Porowatość (0-1)
-        total_volume_mm3: Objętość kontenera [mm³]
-        internal_surface_area_mm2: Wewnętrzna powierzchnia [mm²]
+        porosity: Porosity [0-1]
+        total_volume_mm3: Container volume [mm³]
+        internal_surface_area_mm2: Internal surface area [mm²]
 
     Returns:
-        d_h w mm
+        d_h in mm
     """
     if internal_surface_area_mm2 <= 0:
         return 0

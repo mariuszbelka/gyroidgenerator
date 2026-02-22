@@ -149,7 +149,7 @@ class PredictionsTab(QWidget):
         self.k_geom_spin = QDoubleSpinBox()
         self.k_geom_spin.setRange(1.0, 1000.0)
         self.k_geom_spin.setValue(32.0)
-        self.k_geom_spin.setToolTip("Geometry Resistance Factor. 32 = straight capillaries (Hagen-Poiseuille).\nTypical for gyroids: 30-50.")
+        self.k_geom_spin.setToolTip("Geometry Resistance Factor (K_geom). 32 = straight capillaries (Hagen-Poiseuille).\nFor TPMS structures, this value typically ranges from 30 to 50.")
         h.addWidget(self.k_geom_spin)
         fg_layout.addLayout(h)
 
@@ -201,6 +201,15 @@ class PredictionsTab(QWidget):
         # ΔP tab
         self.dp_widget = QWidget()
         dp_layout = QVBoxLayout(self.dp_widget)
+
+        # Physics Info
+        dp_info = QLabel("<b>Model: Darcy-based Monolith Equation</b><br>"
+                        "ΔP = (K_geom * η * u * L) / (d_h² * ε)<br>"
+                        "<font color='#666'>η: viscosity, u: superficial velocity, d_h: hydraulic diameter, ε: porosity</font>")
+        dp_info.setWordWrap(True)
+        dp_info.setStyleSheet("background-color: #f8f9fa; padding: 5px; border: 1px solid #dee2e6;")
+        dp_layout.addWidget(dp_info)
+
         self.dp_figure = Figure(figsize=(6, 4))
         self.dp_canvas = FigureCanvas(self.dp_figure)
         dp_layout.addWidget(self.dp_canvas)
@@ -213,6 +222,15 @@ class PredictionsTab(QWidget):
         # Van Deemter tab
         self.vd_widget = QWidget()
         vd_layout = QVBoxLayout(self.vd_widget)
+
+        vd_info = QLabel("<b>Model: Van Deemter (HETP) for TPMS</b><br>"
+                        "H = A + B/u + (C_s + C_m) * u<br>"
+                        "<font color='#666'>A: Eddy Diffusion (2·λ·d_p), B: Longitudinal Diffusion (2·γ·D_m/τ²), "
+                        "C: Mass Transfer Resistance (S-phase + M-phase)</font>")
+        vd_info.setWordWrap(True)
+        vd_info.setStyleSheet("background-color: #f8f9fa; padding: 5px; border: 1px solid #dee2e6;")
+        vd_layout.addWidget(vd_info)
+
         self.vd_figure = Figure(figsize=(6, 4))
         self.vd_canvas = FigureCanvas(self.vd_figure)
         vd_layout.addWidget(self.vd_canvas)
@@ -225,6 +243,14 @@ class PredictionsTab(QWidget):
         # Desorption tab
         self.des_widget = QWidget()
         des_layout = QVBoxLayout(self.des_widget)
+
+        des_info = QLabel("<b>Model: Two-Stage Kinetics</b><br>"
+                         "1. Wall Diffusion (Crank Slab Model): t ∝ (wall/2)² / D_polymer<br>"
+                         "2. Convective Sweep: t_sweep = V_void / Flow_rate")
+        des_info.setWordWrap(True)
+        des_info.setStyleSheet("background-color: #f8f9fa; padding: 5px; border: 1px solid #dee2e6;")
+        des_layout.addWidget(des_info)
+
         self.des_figure = Figure(figsize=(6, 4))
         self.des_canvas = FigureCanvas(self.des_figure)
         des_layout.addWidget(self.des_canvas)
@@ -235,9 +261,20 @@ class PredictionsTab(QWidget):
         self.result_tabs.addTab(self.des_widget, "Desorption")
 
         # Capacity tab
+        self.cap_widget = QWidget()
+        cap_layout = QVBoxLayout(self.cap_widget)
+
+        cap_info = QLabel("<b>Model: Surface-Based Binding Capacity</b><br>"
+                         "Q = Internal_Area * Accessibility * Surface_Density<br>"
+                         "<font color='#666'>Includes size-exclusion (ASA) if calculated.</font>")
+        cap_info.setWordWrap(True)
+        cap_info.setStyleSheet("background-color: #f8f9fa; padding: 5px; border: 1px solid #dee2e6;")
+        cap_layout.addWidget(cap_info)
+
         self.cap_text = QTextEdit()
         self.cap_text.setReadOnly(True)
-        self.result_tabs.addTab(self.cap_text, "Capacity")
+        cap_layout.addWidget(self.cap_text)
+        self.result_tabs.addTab(self.cap_widget, "Capacity")
 
         layout.addWidget(self.result_tabs, stretch=1)
 
@@ -394,11 +431,11 @@ class PredictionsTab(QWidget):
         # Plot
         self.dp_figure.clear()
         ax = self.dp_figure.add_subplot(111)
-        ax.plot(curve['flow_rates_uL_min'], curve['delta_P_bar'], 'b-', linewidth=2)
+        ax.plot(curve['flow_rates_uL_min'], curve['pressure_drop_bar'], 'b-', linewidth=2)
         ax.axvline(flow, color='r', linestyle='--', alpha=0.7, label=f'Current: {flow} µL/min')
 
         # Only show limits if within range
-        max_p = max(curve['delta_P_bar'])
+        max_p = max(curve['pressure_drop_bar'])
         if max_p > 400:
             ax.axhline(400, color='orange', linestyle=':', alpha=0.5, label='HPLC limit (400 bar)')
         if max_p > 1000:
@@ -417,16 +454,16 @@ class PredictionsTab(QWidget):
             self.dp_text.setText(f"⚠ {result['error']}")
             return
 
-        p_display = f"{result['delta_P_bar']:.4f} bar"
-        if result['delta_P_bar'] < 0.1:
-            p_display = f"{result['delta_P_mbar']:.2f} mbar"
+        p_display = f"{result['pressure_drop_bar']:.4f} bar"
+        if result['pressure_drop_bar'] < 0.1:
+            p_display = f"{result['pressure_drop_mbar']:.2f} mbar"
 
         text = f"""Pressure Drop Results:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ΔP = {p_display}  ({result['delta_P_psi']:.2f} PSI)
+  ΔP = {p_display}  ({result['pressure_drop_psi']:.2f} PSI)
   Flow: {flow:.1f} µL/min
-  u_superficial: {result['u_superficial_m_s']*1000:.3f} mm/s
-  u_interstitial: {result['u_interstitial_m_s']*1000:.3f} mm/s
+  u_superficial: {result['superficial_velocity_m_s']*1000:.3f} mm/s
+  u_interstitial: {result['interstitial_velocity_m_s']*1000:.3f} mm/s
   d_h: {d_h_mm*1000:.1f} µm
   Permeability: {result['permeability_m2']:.2e} m²
   Porosity: {porosity:.3f} | K_geom: {k_geom}
@@ -506,8 +543,8 @@ class PredictionsTab(QWidget):
         ax.plot(u, np.array(result['H_Cm_m']) * 1e6, 'c--', alpha=0.6, label='Cm (mob. phase)')
 
         # Mark optimum
-        u_opt = result['u_opt_m_s'] * 1000
-        H_min = result['H_min_um']
+        u_opt = result['optimal_velocity_m_s'] * 1000
+        H_min = result['minimal_hetp_um']
         ax.plot(u_opt, H_min, 'ro', markersize=10, zorder=5,
                 label=f'Optimum: H={H_min:.1f} µm @ u={u_opt:.2f} mm/s')
 
@@ -526,20 +563,20 @@ class PredictionsTab(QWidget):
 
         text = f"""Van Deemter Results:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  H_min = {result['H_min_um']:.1f} µm
-  u_opt = {result['u_opt_m_s']*1000:.3f} mm/s
-  N/m = {result['N_per_m']:.0f} plates/m (Note: For extraction, low N is common)
+  H_min = {result['minimal_hetp_um']:.1f} µm
+  u_opt = {result['optimal_velocity_m_s']*1000:.3f} mm/s
+  N/m = {result['theoretical_plates_per_meter']:.0f} plates/m (Note: For extraction, low N is common)
 
   For column L = {L_mm:.1f} mm:
-    N = {result['N_per_m'] * col_L:.0f} theoretical plates
+    N = {result['theoretical_plates_per_meter'] * col_L:.0f} theoretical plates
 
   Terms:
-    A (eddy diffusion) = {result['A_m']*1e6:.1f} µm
-    B (axial diffusion) = {result['B_m2_s']:.2e} m²/s
-    C_s (stationary) = {result['C_s_s']*1000:.4f} ms
-    C_m (mobile) = {result['C_m_s']*1000:.4f} ms
+    A (eddy diffusion) = {result['eddy_diffusion_term_m']*1e6:.1f} µm
+    B (axial diffusion) = {result['longitudinal_diffusion_term_m2_s']:.2e} m²/s
+    C_s (stationary) = {result['stationary_phase_mass_transfer_s']*1000:.4f} ms
+    C_m (mobile) = {result['mobile_phase_mass_transfer_s']*1000:.4f} ms
     Dominant: {result['dominant_term']}
-    C_s fraction: {result['C_s_fraction']:.0%}
+    C_s fraction: {result['stationary_phase_fraction']:.0%}
 
   D_mobile: {result['D_mobile']:.2e} m²/s
   D_polymer: {result['D_polymer']:.2e} m²/s
@@ -739,18 +776,18 @@ class PredictionsTab(QWidget):
                 if 'dp' in self._results:
                     r = self._results['dp']
                     if 'error' not in r:
-                        f.write(f"delta_P_bar,{r['delta_P_bar']:.4f},bar\n")
-                        f.write(f"delta_P_psi,{r['delta_P_psi']:.1f},PSI\n")
+                        f.write(f"pressure_drop_bar,{r['pressure_drop_bar']:.4f},bar\n")
+                        f.write(f"pressure_drop_psi,{r['pressure_drop_psi']:.1f},PSI\n")
                         f.write(f"permeability,{r['permeability_m2']:.4e},m2\n")
 
                 if 'vd' in self._results:
                     r = self._results['vd']
-                    f.write(f"H_min,{r['H_min_um']:.2f},um\n")
-                    f.write(f"u_opt,{r['u_opt_m_s']*1000:.4f},mm/s\n")
-                    f.write(f"N_per_m,{r['N_per_m']:.0f},plates/m\n")
-                    f.write(f"A_term,{r['A_m']*1e6:.2f},um\n")
-                    f.write(f"C_s,{r['C_s_s']:.6e},s\n")
-                    f.write(f"C_m,{r['C_m_s']:.6e},s\n")
+                    f.write(f"minimal_hetp_um,{r['minimal_hetp_um']:.2f},um\n")
+                    f.write(f"optimal_velocity_mm_s,{r['optimal_velocity_m_s']*1000:.4f},mm/s\n")
+                    f.write(f"theoretical_plates_per_meter,{r['theoretical_plates_per_meter']:.0f},plates/m\n")
+                    f.write(f"eddy_diffusion_term_um,{r['eddy_diffusion_term_m']*1e6:.2f},um\n")
+                    f.write(f"stationary_phase_mass_transfer_s,{r['stationary_phase_mass_transfer_s']:.6e},s\n")
+                    f.write(f"mobile_phase_mass_transfer_s,{r['mobile_phase_mass_transfer_s']:.6e},s\n")
 
                 if 'desorption' in self._results:
                     r = self._results['desorption']

@@ -1,15 +1,15 @@
 """
-Distributions Module — Analiza rozkładów i topologii struktury
+Distributions Module — Structural and Topological Analysis
 ================================================================
-Moduł obliczeniowy dla:
-  - Rozkład grubości ścian (wall thickness distribution)
-  - Rozkład szerokości kanałów (channel width distribution)
-  - Connectivity / dead-end fraction / perkolacja
+Computational module for:
+  - Wall thickness distribution
+  - Channel width distribution
+  - Connectivity / dead-end fraction / percolation
   - Accessible Surface Area (ASA, probe-based)
   - Throat / constriction analysis
   - Printability score
 
-Metody bazują na voxelizacji + distance transform (EDT).
+Methods are based on mesh ray-casting and voxelization + distance transform (EDT).
 
 Refs:
   - Hildebrand, T. & Rüegsegger, P. (1997) JBMR 12(7):1167-1174
@@ -193,8 +193,8 @@ class VoxelAnalyzer:
                                         batch_size: int = 100,
                                         callback=None) -> Dict:
         """
-        Rozkład grubości ścian (Mesh-based Ray Casting).
-        Mierzy odległość między przeciwległymi ściankami szkieletu.
+        Wall thickness distribution (Mesh-based Ray Casting).
+        Measures the distance between opposing surfaces of the skeleton.
         """
         t0 = time.time()
 
@@ -287,8 +287,8 @@ class VoxelAnalyzer:
                                          batch_size: int = 100,
                                          callback=None) -> Dict:
         """
-        Rozkład szerokości kanałów (Mesh-based Ray Casting).
-        Mierzy odległość między ściankami wewnątrz pustych kanałów.
+        Channel width distribution (Mesh-based Ray Casting).
+        Measures the distance between walls within the void channels.
         """
         t0 = time.time()
 
@@ -376,7 +376,7 @@ class VoxelAnalyzer:
 
     def calc_connectivity(self, voxels_per_uc: int = 12) -> Dict:
         """
-        Analiza connectivity kanałów (void space) wewnątrz kontenera.
+        Channel connectivity analysis (void space) within the container.
         """
         t0 = time.time()
         self._voxelize(voxels_per_uc)
@@ -464,16 +464,16 @@ class VoxelAnalyzer:
         """
         Accessible Surface Area (ASA) — particulate accessibility simulation.
 
-        Metoda:
-        1. Erozja void space o promień sondy (w voxelach)
-        2. ASA = powierzchnia na granicy solid-void po erozji.
+        Method:
+        1. Erode void space by probe radius (in voxels).
+        2. ASA = surface area at the solid-void interface after erosion.
 
         Args:
-            probe_radii_um: Lista promieni sondy [µm]. Default: [0, 10, 20, 50, 100]
-            voxels_per_uc: Rozdzielczość voxelizacji
+            probe_radii_um: List of probe radii [µm]. Default: [0, 10, 20, 50, 100]
+            voxels_per_uc: Voxelization resolution
 
         Returns:
-            Dict z ASA dla każdego promienia sondy
+            Dict with ASA for each probe radius
         """
         t0 = time.time()
         self._voxelize(voxels_per_uc)
@@ -543,16 +543,16 @@ class VoxelAnalyzer:
 
     def calc_throat_distribution(self, channel_results: Dict) -> Dict:
         """
-        Analiza przewężeń (throat / constriction analysis).
-        Zoptymalizowana: analityczny szacunek bazujący na rozkładzie kanałów.
+        Throat / constriction analysis.
+        Optimized: analytical estimate based on channel distribution.
 
-        Metoda:
-        Dla struktur gyroidalnych:
-          Mean throat ≈ 0.70 × Mean channel width
-          P10 throat ≈ 0.70 × P10 channel width
+        Method:
+        For Gyroid structures:
+          Mean throat ≈ 0.70 * Mean channel width
+          P10 throat ≈ 0.70 * P10 channel width
 
         Returns:
-            Dict z szacunkami throat sizes
+            Dict with throat size estimates
         """
         t0 = time.time()
 
@@ -597,16 +597,16 @@ class VoxelAnalyzer:
     def calc_printability(self, wall_results: Dict, channel_results: Dict,
                           voxels_per_uc: int = 12) -> Dict:
         """
-        Printability score — ocena realizowalności druku DLP.
-        Zoptymalizowana: używa percentyli P1/P5 zamiast absolutnych minimów.
+        Printability score — DLP 3D printing feasibility assessment.
+        Optimized: uses P1/P5 percentiles instead of absolute minima for robustness.
 
         Args:
             wall_results: Results from calc_wall_thickness_distribution
             channel_results: Results from calc_channel_width_distribution
-            voxels_per_uc: Rozdzielczość dla analizy trapped resin
+            voxels_per_uc: Resolution for trapped resin analysis
 
         Returns:
-            Dict z printability score i szczegółami
+            Dict with printability score and details
         """
         t0 = time.time()
         self._voxelize(voxels_per_uc)

@@ -199,22 +199,26 @@ class DistributionsTab(QWidget):
 
         self.cb_wall = QCheckBox("Wall Thickness (Ray Casting)")
         self.cb_wall.setChecked(True)
-        self.cb_wall.setToolTip("Uses mesh-based ray casting for high precision independent of voxel resolution.")
+        self.cb_wall.setToolTip("Uses mesh-based ray casting to measure the distance from surface to surface through the solid phase.\n"
+                                "High precision, independent of voxel resolution. Includes outlier filtering.")
         sg_layout.addWidget(self.cb_wall)
 
         self.cb_channel = QCheckBox("Channel Width (Ray Casting)")
         self.cb_channel.setChecked(True)
-        self.cb_channel.setToolTip("Uses mesh-based ray casting. Accurately measures internal voids without edge effects.")
+        self.cb_channel.setToolTip("Uses mesh-based ray casting to measure internal voids.\n"
+                                   "Accurately captures channel dimensions without discretization artifacts.")
         sg_layout.addWidget(self.cb_channel)
 
         self.cb_connectivity = QCheckBox("Topological Connectivity")
         self.cb_connectivity.setChecked(True)
-        self.cb_connectivity.setToolTip("Checks for continuous topological paths (islands/bubbles).\nNote: Does not calculate hydrodynamic dead volumes.")
+        self.cb_connectivity.setToolTip("Voxel-based analysis (scipy.ndimage) to detect connected void components.\n"
+                                        "Restricted to the actual container volume. Checks for Z-axis through-paths.")
         sg_layout.addWidget(self.cb_connectivity)
 
         self.cb_asa = QCheckBox("Particulate Accessibility (ASA)")
         self.cb_asa.setChecked(True)
-        self.cb_asa.setToolTip("Simulates access of large particles (10-100 µm) into the structure via binary erosion.")
+        self.cb_asa.setToolTip("Probe-based simulation of particle access using binary erosion of the masked void space.\n"
+                               "Quantifies the fraction of surface area reachable by particles of specific radii (10-100 µm).")
         sg_layout.addWidget(self.cb_asa)
 
         self.cb_throat = QCheckBox("Throat / Clogging Analysis")

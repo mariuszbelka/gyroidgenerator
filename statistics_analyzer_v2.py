@@ -83,39 +83,39 @@ class StatisticsCalculator:
     def calculate_specific_surface_area(self, basic_props: Dict,
                                        density: float = 1.05) -> Dict:
         """
-        Calculate specific surface area (instant).
+        Calculate specific surface area (SSA).
 
         Args:
             basic_props: Output from calculate_basic_properties()
             density: Material density in g/cm³
 
         Returns:
-            Dict with SSA_volumetric (m²/mL), SSA_gravimetric (m²/g), mass (g)
+            Dict with volumetric and gravimetric SSA.
         """
         start_time = time.time()
 
         surface_area_mm2 = basic_props['surface_area']
-        surface_area_m2 = surface_area_mm2 / 1e6  # mm² → m²
+        surface_area_m2 = surface_area_mm2 / 1e6  # mm² -> m²
 
         results = {}
 
         if basic_props['total_volume'] is not None:
             total_volume_mm3 = basic_props['total_volume']
-            total_volume_mL = total_volume_mm3 / 1000  # mm³ → mL
+            total_volume_mL = total_volume_mm3 / 1000  # mm³ -> mL
 
-            # Volumetric SSA
-            results['SSA_volumetric'] = surface_area_m2 / total_volume_mL  # m²/mL
+            # Volumetric SSA (m²/mL)
+            results['ssa_volumetric'] = surface_area_m2 / total_volume_mL
 
             # Mass calculation
-            gyroid_volume_cm3 = basic_props['gyroid_volume'] / 1000  # mm³ → cm³
+            gyroid_volume_cm3 = basic_props['gyroid_volume'] / 1000  # mm³ -> cm³
             mass_g = gyroid_volume_cm3 * density
             results['mass_g'] = mass_g
 
-            # Gravimetric SSA
-            results['SSA_gravimetric'] = surface_area_m2 / mass_g  # m²/g
+            # Gravimetric SSA (m²/g)
+            results['ssa_gravimetric'] = surface_area_m2 / mass_g
         else:
-            results['SSA_volumetric'] = None
-            results['SSA_gravimetric'] = None
+            results['ssa_volumetric'] = None
+            results['ssa_gravimetric'] = None
             results['mass_g'] = None
 
         results['density_g_cm3'] = density
@@ -656,12 +656,12 @@ class StatisticsV2:
         }
 
     def calc_specific_surface_area(self, density: float = 1.05) -> Dict:
-        """Calculate SSA. Transforms keys: SSA_volumetric → ssa_volumetric."""
+        """Calculate SSA."""
         bp = self._ensure_basic_props()
         raw = self._calc.calculate_specific_surface_area(bp, density=density)
         return {
-            'ssa_volumetric': raw.get('SSA_volumetric'),
-            'ssa_gravimetric': raw.get('SSA_gravimetric'),
+            'ssa_volumetric': raw.get('ssa_volumetric'),
+            'ssa_gravimetric': raw.get('ssa_gravimetric'),
             'mass_g': raw.get('mass_g'),
             'calculation_time': raw.get('calculation_time', 0),
         }
@@ -715,19 +715,19 @@ class StatisticsV2:
     def calc_external_surface_area(self) -> Dict:
         """Adds internal/total/fraction keys for display."""
         raw = self._calc.calculate_external_surface_area()
-        bp = self._ensure_basic_props()
+        basic_props = self._ensure_basic_props()
 
-        external = raw.get('external_area_mm2', 0) or 0
-        analytical = raw.get('analytical_container_area_mm2', 0) or 0
-        total_sa = bp.get('surface_area', 0)
-        internal = max(0, total_sa - external)
+        external_area = raw.get('external_area_mm2', 0) or 0
+        analytical_area = raw.get('analytical_container_area_mm2', 0) or 0
+        total_area = basic_props.get('surface_area', 0)
+        internal_area = max(0, total_area - external_area)
 
         return {
-            'external_area_mm2': external,
-            'analytical_area_mm2': analytical,
-            'internal_area_mm2': internal,
-            'total_area_mm2': total_sa,
-            'external_fraction_percent': (external / total_sa * 100) if total_sa > 0 else 0,
+            'external_area_mm2': external_area,
+            'analytical_area_mm2': analytical_area,
+            'internal_area_mm2': internal_area,
+            'total_area_mm2': total_area,
+            'external_fraction_percent': (external_area / total_area * 100) if total_area > 0 else 0,
             'calculation_time': raw.get('calculation_time', 0),
         }
 
