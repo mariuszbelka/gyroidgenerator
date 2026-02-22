@@ -3,8 +3,7 @@
 ## Uruchomienie
 
 ```cmd
-cd "C:\Users\Mariusz Belka\OneDrive\___Mariusz\gyroid_generator\opus_v3"
-"C:\Users\Mariusz Belka\AppData\Local\Programs\Python\Python313\python.exe" gui_main.py
+python gui_main.py
 ```
 
 Wymagania (już zainstalowane z v2):

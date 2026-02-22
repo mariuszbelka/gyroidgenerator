@@ -37,6 +37,7 @@ class AnalysisWorker(QThread):
     """Background thread for heavy voxel analysis."""
     finished = pyqtSignal(str, dict)  # (analysis_name, results)
     progress = pyqtSignal(str)  # status message
+    sub_progress = pyqtSignal(str, int)  # (analysis_name, percentage)
     error = pyqtSignal(str, str)  # (analysis_name, error_message)
 
     def __init__(self, analyzer: VoxelAnalyzer, analyses: list, voxels_per_uc: int):
@@ -48,6 +49,11 @@ class AnalysisWorker(QThread):
     def run(self):
         results_cache = {}
 
+        # Determine dynamic sample count based on mesh complexity
+        # Target: ~10% of faces for sparse meshes, up to 50k for dense meshes
+        n_faces = len(self.analyzer.mesh.faces)
+        dynamic_n_samples = max(10000, min(50000, n_faces // 5))
+
         # Determine execution order (some depend on others)
         ordered_analyses = []
         for n in ['wall_thickness', 'channel_width', 'connectivity', 'asa', 'throat', 'printability']:
@@ -58,12 +64,20 @@ class AnalysisWorker(QThread):
             try:
                 self.progress.emit(f"Computing {name}...")
 
+                def make_callback(n):
+                    return lambda p: self.sub_progress.emit(n, p)
+
                 if name == 'wall_thickness':
-                    # Use n_samples instead of voxels_per_uc for ray casting
-                    result = self.analyzer.calc_wall_thickness_distribution(n_samples=20000)
+                    result = self.analyzer.calc_wall_thickness_distribution(
+                        n_samples=dynamic_n_samples,
+                        callback=make_callback(name)
+                    )
                     results_cache['wall'] = result
                 elif name == 'channel_width':
-                    result = self.analyzer.calc_channel_width_distribution(n_samples=20000)
+                    result = self.analyzer.calc_channel_width_distribution(
+                        n_samples=dynamic_n_samples,
+                        callback=make_callback(name)
+                    )
                     results_cache['channel'] = result
                 elif name == 'connectivity':
                     result = self.analyzer.calc_connectivity(self.voxels_per_uc)
@@ -310,6 +324,7 @@ class DistributionsTab(QWidget):
         )
         self._worker.finished.connect(self._on_result)
         self._worker.progress.connect(self._on_progress)
+        self._worker.sub_progress.connect(self._on_sub_progress)
         self._worker.error.connect(self._on_error)
         self._worker.finished.connect(self._check_done)
         self._pending = set(analyses)
@@ -317,6 +332,10 @@ class DistributionsTab(QWidget):
 
     def _on_progress(self, msg):
         self.progress_label.setText(msg)
+
+    def _on_sub_progress(self, name, percentage):
+        current_msg = self.progress_label.text().split(" (")[0]
+        self.progress_label.setText(f"{current_msg} ({percentage}%)")
 
     def _on_error(self, name, error):
         self._pending.discard(name)

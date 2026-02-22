@@ -112,10 +112,17 @@ class VoxelAnalyzer:
 
     # ==================== WALL THICKNESS DISTRIBUTION ====================
 
-    def calc_wall_thickness_distribution(self, n_samples: int = 10000) -> Dict:
+    def calc_wall_thickness_distribution(self, n_samples: int = 10000,
+                                        batch_size: int = 2000,
+                                        callback=None) -> Dict:
         """
         Rozkład grubości ścian (Mesh-based Ray Casting).
         Mierzy odległość między przeciwległymi ściankami szkieletu.
+
+        Args:
+            n_samples: Total number of rays to cast
+            batch_size: Number of rays per batch to avoid MemoryError
+            callback: Function to report progress, called as callback(percentage)
 
         Returns:
             Dict z histogramem, percentylami, statystykami
@@ -129,19 +136,37 @@ class VoxelAnalyzer:
         # Normal vectors point OUT of the solid towards the void.
         normals = self.mesh.face_normals[face_indices]
         ray_directions = -normals
-
-        # 3. Ray casting from slightly inside to find opposite wall
         ray_origins = points + (ray_directions * 1e-5)
 
-        locations, index_ray, _ = self.mesh.ray.intersects_location(
-            ray_origins=ray_origins,
-            ray_directions=ray_directions,
-            multiple_hits=False
-        )
+        # 3. Ray casting in batches
+        all_distances = []
+        n_batches = int(np.ceil(n_samples / batch_size))
+
+        for i in range(n_batches):
+            start = i * batch_size
+            end = min((i + 1) * batch_size, n_samples)
+
+            b_origins = ray_origins[start:end]
+            b_dirs = ray_directions[start:end]
+
+            locations, index_ray, _ = self.mesh.ray.intersects_location(
+                ray_origins=b_origins,
+                ray_directions=b_dirs,
+                multiple_hits=False
+            )
+
+            if len(locations) > 0:
+                dist = np.linalg.norm(locations - b_origins[index_ray], axis=1)
+                all_distances.append(dist)
+
+            if callback:
+                callback(int((i + 1) / n_batches * 100))
 
         # 4. Calculate distances
-        distances = np.linalg.norm(locations - ray_origins[index_ray], axis=1)
-        wall_values_um = distances * 1000.0  # mm -> µm
+        if not all_distances:
+            return {'error': 'No wall thickness measurements found'}
+
+        wall_values_um = np.concatenate(all_distances) * 1000.0  # mm -> µm
 
         if len(wall_values_um) == 0:
             return {'error': 'No wall thickness measurements found'}
@@ -179,10 +204,17 @@ class VoxelAnalyzer:
 
     # ==================== CHANNEL WIDTH DISTRIBUTION ====================
 
-    def calc_channel_width_distribution(self, n_samples: int = 10000) -> Dict:
+    def calc_channel_width_distribution(self, n_samples: int = 10000,
+                                         batch_size: int = 2000,
+                                         callback=None) -> Dict:
         """
         Rozkład szerokości kanałów (Mesh-based Ray Casting).
         Mierzy odległość między ściankami wewnątrz pustych kanałów.
+
+        Args:
+            n_samples: Total number of rays to cast
+            batch_size: Number of rays per batch to avoid MemoryError
+            callback: Function to report progress, called as callback(percentage)
 
         Returns:
             Dict z histogramem, percentylami, statystykami
@@ -194,19 +226,37 @@ class VoxelAnalyzer:
 
         # 2. Get normals pointing into the channels
         ray_directions = self.mesh.face_normals[face_indices]
-
-        # 3. Ray casting
         ray_origins = points + (ray_directions * 1e-5)
 
-        locations, index_ray, _ = self.mesh.ray.intersects_location(
-            ray_origins=ray_origins,
-            ray_directions=ray_directions,
-            multiple_hits=False
-        )
+        # 3. Ray casting in batches
+        all_distances = []
+        n_batches = int(np.ceil(n_samples / batch_size))
+
+        for i in range(n_batches):
+            start = i * batch_size
+            end = min((i + 1) * batch_size, n_samples)
+
+            b_origins = ray_origins[start:end]
+            b_dirs = ray_directions[start:end]
+
+            locations, index_ray, _ = self.mesh.ray.intersects_location(
+                ray_origins=b_origins,
+                ray_directions=b_dirs,
+                multiple_hits=False
+            )
+
+            if len(locations) > 0:
+                dist = np.linalg.norm(locations - b_origins[index_ray], axis=1)
+                all_distances.append(dist)
+
+            if callback:
+                callback(int((i + 1) / n_batches * 100))
 
         # 4. Calculate distances (discard rays that leave the container)
-        distances = np.linalg.norm(locations - ray_origins[index_ray], axis=1)
-        channel_values_um = distances * 1000.0
+        if not all_distances:
+            return {'error': 'No channel width measurements found'}
+
+        channel_values_um = np.concatenate(all_distances) * 1000.0
 
         if len(channel_values_um) == 0:
             return {'error': 'No channel width measurements found'}
