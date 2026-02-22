@@ -24,3 +24,5 @@ pyqtgraph>=0.13.0
 
 # Image export
 Pillow>=9.5.0
+PyOpenGL
+PyOpenGL_accelerate
