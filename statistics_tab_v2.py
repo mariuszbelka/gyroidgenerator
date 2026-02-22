@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QCheckBox, QRadioButton, QButtonGroup, QLabel,
     QPushButton, QTextEdit, QComboBox, QSpinBox,
-    QProgressBar, QScrollArea
+    QDoubleSpinBox, QProgressBar, QScrollArea
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QFont
@@ -444,10 +444,14 @@ class StatisticsTabV2(QWidget):
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
             elif 'external_area_mm2' in result:
-                text += f"  External: {result['external_area_mm2']:.1f} mm²\n"
-                text += f"  Internal: {result['internal_area_mm2']:.1f} mm²\n"
-                text += f"  Total:    {result['total_area_mm2']:.1f} mm²\n"
-                text += f"  External fraction: {result['external_fraction_percent']:.1f}%\n"
+                text += f"  External (with holes):  {result['external_area_mm2']:.2f} mm²\n"
+                text += f"  External (theoretical): {result['analytical_area_mm2']:.2f} mm²\n"
+                text += f"  Internal area:          {result['internal_area_mm2']:.2f} mm²\n"
+                text += f"  Total mesh area:        {result['total_area_mm2']:.2f} mm²\n"
+
+                # Requested: internal / total %
+                int_fraction = (result['internal_area_mm2'] / result['total_area_mm2'] * 100) if result['total_area_mm2'] > 0 else 0
+                text += f"  Internal fraction:      {int_fraction:.1f}%\n"
                 text += f"  ⏱ Time: {result['calculation_time']:.3f}s\n\n"
 
         text += "=" * 70 + "\n"
