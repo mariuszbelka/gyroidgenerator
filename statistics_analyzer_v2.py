@@ -621,10 +621,10 @@ class StatisticsV2:
             'porosity': bp.get('porosity'),
         }
 
-    def calc_specific_surface_area(self) -> Dict:
+    def calc_specific_surface_area(self, density: float = 1.05) -> Dict:
         """Calculate SSA. Transforms keys: SSA_volumetric → ssa_volumetric."""
         bp = self._ensure_basic_props()
-        raw = self._calc.calculate_specific_surface_area(bp)
+        raw = self._calc.calculate_specific_surface_area(bp, density=density)
         return {
             'ssa_volumetric': raw.get('SSA_volumetric'),
             'ssa_gravimetric': raw.get('SSA_gravimetric'),

@@ -315,7 +315,7 @@ class StatisticsTabV2(QWidget):
         if self.cb_ssa.isChecked():
             calcs.append(('Specific Surface Area',
                          self.stats_analyzer.calc_specific_surface_area,
-                         {}))
+                         {'density': density}))
 
         if self.cb_wall_theoretical.isChecked():
             calcs.append(('Wall Thickness (Theoretical)',
